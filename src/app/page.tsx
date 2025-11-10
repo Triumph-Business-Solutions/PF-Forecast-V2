@@ -1,5 +1,6 @@
 "use client";
 
+import { ROLE_DEFINITIONS } from "@/lib/auth/roles";
 import { useMemo, useState } from "react";
 
 type TrendPoint = {
