@@ -368,10 +368,10 @@ export default function HomePage() {
         : WEEK_TREND_ACCOUNT_SERIES;
 
     const monthCount = VIEW_MONTH_COUNTS[selectedView];
-    if (!monthCount || cadence === "Weekly") {
+    if (cadence === "Weekly" || !monthCount) {
       return sourceSeries.map((series) => ({
         ...series,
-        points: cadence === "Weekly" ? series.points : series.points.slice(-monthCount ?? series.points.length)
+        points: series.points
       }));
     }
 
