@@ -1,5 +1,6 @@
 "use client";
 
+import { ROLE_DEFINITIONS } from "@/lib/auth/roles";
 import { useMemo, useState } from "react";
 
 type TrendPoint = {
@@ -172,6 +173,29 @@ const UPCOMING_MILESTONES = [
   {
     label: "Next tax payment",
     value: "—"
+  }
+];
+
+type PlatformFoundationSection = {
+  title: string;
+  description: string;
+};
+
+const PLATFORM_FOUNDATION_SECTIONS: PlatformFoundationSection[] = [
+  {
+    title: "Role-aware authentication",
+    description:
+      "Supabase Auth sessions will encode firm and company roles so UI access mirrors the stakeholder model."
+  },
+  {
+    title: "Relational data model",
+    description:
+      "Schema captures firms, companies, and memberships to persist collaboration boundaries alongside forecasts."
+  },
+  {
+    title: "Policy-driven security",
+    description:
+      "Row Level Security policies ensure members only interact with data their assigned role grants visibility into."
   }
 ];
 
@@ -685,7 +709,7 @@ export default function HomePage() {
               iterations of the product.
             </p>
             <div className="grid gap-4 md:grid-cols-3">
-              {contentSections.map((section) => (
+              {PLATFORM_FOUNDATION_SECTIONS.map((section) => (
                 <div key={section.title} className="rounded-xl border border-brand-200 bg-white p-4 text-left shadow-sm">
                   <h4 className="text-sm font-semibold text-brand-800">{section.title}</h4>
                   <p className="mt-2 text-xs text-brand-700">{section.description}</p>
