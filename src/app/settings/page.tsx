@@ -119,8 +119,8 @@ export default function SettingsPage() {
   const hiddenFirmOwnerItems = selectedSection?.items?.some((item) => item.requiresFirmOwner) && !isFirmOwner;
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-16">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-12">
+    <main className="min-h-screen bg-slate-50 px-4 py-16 sm:px-[5vw]">
+      <div className="mx-auto flex w-full flex-col gap-12">
         <header className="space-y-4 text-center">
           <span className="inline-flex items-center rounded-full bg-brand-100 px-4 py-1 text-sm font-semibold text-brand-700">
             Settings overview
