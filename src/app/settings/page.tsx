@@ -358,7 +358,7 @@ export default function SettingsPage() {
   };
 
   const shouldRenderAllocationCadence =
-    selectedSection.key === "profit_first_setup" && selectedItem?.title === "Allocation cadence";
+    selectedSection.key === "profit-first-setup" && selectedItem?.title === "Allocation cadence";
   const resolvedCompanyName = activeCompany?.name ?? displayCompanyName;
   const canRenderCadenceForm =
     shouldRenderAllocationCadence && Boolean(activeCompanyId) && (!hasResolvedCompanies || Boolean(activeCompany));
