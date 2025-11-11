@@ -5,21 +5,17 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useDemoAuth } from "@/components/demo-auth-provider";
+import { useDashboard } from "@/components/dashboard/dashboard-context";
 import { loadActiveCompany, subscribeToActiveCompanyChanges } from "@/lib/active-company-storage";
 
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, clearUser } = useDemoAuth();
-  const [activeCompanyName, setActiveCompanyName] = useState<string>(() => {
-    if (typeof window === "undefined") {
-      return "";
-    }
-
-    return loadActiveCompany()?.name ?? "";
-  });
+  const { openDashboard, resetDashboardSession } = useDashboard();
   const isSettingsPage = pathname?.startsWith("/settings");
   const isHomePage = pathname === "/";
+  const [activeCompanyName, setActiveCompanyName] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -51,9 +47,12 @@ export function AppHeader() {
   const activeCompanyLabel = activeCompanyName ? activeCompanyName : "None selected";
 
   const handleSwitchUser = () => {
+    resetDashboardSession();
     clearUser();
     router.push("/login");
   };
+
+  const showDashboardButton = Boolean(user && (user.role === "firm_owner" || user.role === "firm_employee"));
 
   return (
     <header
@@ -105,6 +104,15 @@ export function AppHeader() {
               Demo login
             </Link>
           )}
+          {showDashboardButton ? (
+            <button
+              type="button"
+              onClick={openDashboard}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${buttonClassName}`}
+            >
+              Firm dashboard
+            </button>
+          ) : null}
           <Link
             href={isSettingsPage ? "/" : "/settings"}
             className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${

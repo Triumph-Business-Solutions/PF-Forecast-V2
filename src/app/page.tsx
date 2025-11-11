@@ -5,10 +5,32 @@ import { fetchClientWorkspaces } from "@/lib/clients/queries";
 import { ROLE_DEFINITIONS } from "@/lib/auth/roles";
 import { supabase } from "@/lib/supabase";
 import type { ClientSummary } from "@/types/clients";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 
 import { useDemoAuth } from "@/components/demo-auth-provider";
+import { useDashboard } from "@/components/dashboard/dashboard-context";
+import { FirmDashboardOverlay } from "@/components/dashboard/firm-dashboard-overlay";
+import {
+  createFirmCompany,
+  createFirmEmployee,
+  fetchFirmEmployees,
+  fetchFirmMemberships,
+  updateFirmEmployee,
+} from "@/lib/firm/queries";
+import type {
+  FirmCompanyFormInput,
+  FirmCompanyMap,
+  FirmEmployeeFormInput,
+  FirmEmployeeMap,
+  FirmMembershipSummary,
+} from "@/types/firm";
 import {
   loadActiveCompany,
   saveActiveCompany,
@@ -334,11 +356,18 @@ export default function HomePage() {
   const roleTitleMap = useMemo(() => new Map(ROLE_DEFINITIONS.map((role) => [role.id, role.title])), []);
   const router = useRouter();
   const { user: demoUser, isLoading: isLoadingDemoUser } = useDemoAuth();
+  const { isOpen: isDashboardOpen, closeDashboard, isReady: isDashboardReady, openDashboard } = useDashboard();
   const [hasSupabaseSession, setHasSupabaseSession] = useState<boolean | null>(null);
   const [assignedClients, setAssignedClients] = useState<ClientSummary[]>([]);
   const [demoClients, setDemoClients] = useState<ClientSummary[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [clientFetchError, setClientFetchError] = useState<string | null>(null);
+  const [activeUserId, setActiveUserId] = useState<string | null>(null);
+  const [firmMemberships, setFirmMemberships] = useState<FirmMembershipSummary[]>([]);
+  const [firmCompaniesMap, setFirmCompaniesMap] = useState<FirmCompanyMap>({});
+  const [firmEmployeeMap, setFirmEmployeeMap] = useState<FirmEmployeeMap>({});
+  const [isLoadingFirmData, setIsLoadingFirmData] = useState(false);
+  const [firmDataError, setFirmDataError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isLoadingDemoUser) {
@@ -407,6 +436,7 @@ export default function HomePage() {
           if (isMounted) {
             setAssignedClients([]);
             setDemoClients(demosOnly.demos);
+            setActiveUserId(null);
           }
         } catch (fallbackError) {
           console.error("Failed to load demo workspaces.", fallbackError);
@@ -414,6 +444,7 @@ export default function HomePage() {
           if (isMounted) {
             setAssignedClients([]);
             setDemoClients([]);
+            setActiveUserId(null);
           }
         }
 
@@ -444,6 +475,104 @@ export default function HomePage() {
       router.replace("/login");
     }
   }, [demoUser, hasSupabaseSession, isLoadingDemoUser, router]);
+
+  useEffect(() => {
+    if (!activeUserId) {
+      setFirmMemberships([]);
+      setFirmEmployeeMap({});
+      setFirmDataError(null);
+      setIsLoadingFirmData(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsLoadingFirmData(true);
+    setFirmDataError(null);
+
+    const loadFirmDetails = async () => {
+      try {
+        const memberships = await fetchFirmMemberships(activeUserId);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setFirmMemberships(memberships);
+
+        const ownerMemberships = memberships.filter((membership) => membership.role === "firm_owner");
+
+        if (ownerMemberships.length === 0) {
+          setFirmEmployeeMap({});
+          return;
+        }
+
+        const employeeEntries = await Promise.all(
+          ownerMemberships.map(async (membership) => {
+            const employees = await fetchFirmEmployees(membership.firmId);
+            return [membership.firmId, employees] as const;
+          }),
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        const nextEmployeeMap: FirmEmployeeMap = {};
+        employeeEntries.forEach(([firmId, employees]) => {
+          nextEmployeeMap[firmId] = employees;
+        });
+        setFirmEmployeeMap(nextEmployeeMap);
+      } catch (error) {
+        console.error("Unable to load firm memberships for dashboard.", error);
+
+        if (isMounted) {
+          setFirmMemberships([]);
+          setFirmEmployeeMap({});
+          setFirmDataError("Unable to load firm memberships right now. Please try again soon.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingFirmData(false);
+        }
+      }
+    };
+
+    void loadFirmDetails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeUserId]);
+
+  useEffect(() => {
+    if (firmMemberships.length === 0) {
+      setFirmCompaniesMap({});
+      return;
+    }
+
+    const combined = new Map<string, ClientSummary>();
+    [...assignedClients, ...demoClients].forEach((client) => {
+      combined.set(client.id, client);
+    });
+
+    if (combined.size === 0) {
+      setFirmCompaniesMap({});
+      return;
+    }
+
+    const nextCompanyMap: FirmCompanyMap = {};
+    firmMemberships.forEach((membership) => {
+      const companiesForFirm = Array.from(combined.values()).filter(
+        (client) => client.firmId === membership.firmId,
+      );
+
+      if (companiesForFirm.length > 0) {
+        nextCompanyMap[membership.firmId] = companiesForFirm;
+      }
+    });
+
+    setFirmCompaniesMap(nextCompanyMap);
+  }, [assignedClients, demoClients, firmMemberships]);
 
   const trendSeries = useMemo(() => {
     const sourceSeries = cadence === "Monthly" ? (trendView === "Total" ? [{
@@ -631,14 +760,147 @@ export default function HomePage() {
   }, [isClientMenuOpen]);
 
   const activeClient = availableClients.find((client) => client.id === activeClientId) ?? null;
+  const primaryOwnerMembership = useMemo(
+    () => firmMemberships.find((membership) => membership.role === "firm_owner") ?? null,
+    [firmMemberships],
+  );
+  const ownerEmployees = primaryOwnerMembership
+    ? firmEmployeeMap[primaryOwnerMembership.firmId] ?? []
+    : [];
+  const ownerCompanies = primaryOwnerMembership
+    ? firmCompaniesMap[primaryOwnerMembership.firmId] ?? []
+    : [];
+  const dashboardIsVisible = isDashboardReady && isDashboardOpen;
+
+  const handleDashboardClientSelect = useCallback(
+    (clientId: string) => {
+      setActiveClientId(clientId);
+      closeDashboard();
+    },
+    [closeDashboard, setActiveClientId],
+  );
+
+  const handleCreateFirmEmployee = useCallback(
+    async (input: FirmEmployeeFormInput) => {
+      if (!primaryOwnerMembership) {
+        throw new Error("Only firm owners can invite new employees.");
+      }
+
+      setFirmDataError(null);
+      await createFirmEmployee({
+        firmId: primaryOwnerMembership.firmId,
+        ...input,
+      });
+
+      const refreshedEmployees = await fetchFirmEmployees(primaryOwnerMembership.firmId);
+      setFirmEmployeeMap((previous) => ({
+        ...previous,
+        [primaryOwnerMembership.firmId]: refreshedEmployees,
+      }));
+    },
+    [primaryOwnerMembership, setFirmEmployeeMap, setFirmDataError],
+  );
+
+  const handleCreateFirmCompany = useCallback(
+    async (input: FirmCompanyFormInput) => {
+      if (!primaryOwnerMembership || !activeUserId) {
+        throw new Error("Only firm owners can create new client workspaces.");
+      }
+
+      setIsLoadingClients(true);
+
+      try {
+        await createFirmCompany({
+          firmId: primaryOwnerMembership.firmId,
+          ownerUserId: activeUserId,
+          ...input,
+        });
+
+        const refreshedClients = await fetchClientWorkspaces(activeUserId);
+        setAssignedClients(refreshedClients.assigned);
+        setDemoClients(refreshedClients.demos);
+
+        if (refreshedClients.errors.length > 0) {
+          const hasAssigned = refreshedClients.assigned.length > 0;
+          setClientFetchError(
+            hasAssigned
+              ? "Some client records could not be loaded. Demo workspaces remain available."
+              : "We couldn't load your assigned clients. Demo workspaces are still available.",
+          );
+        } else {
+          setClientFetchError(null);
+        }
+      } catch (error) {
+        console.error("Unable to create a new client workspace.", error);
+        const message = error instanceof Error ? error.message : "Unable to create the client workspace.";
+        throw new Error(message);
+      } finally {
+        setIsLoadingClients(false);
+      }
+    },
+    [
+      primaryOwnerMembership,
+      activeUserId,
+      setAssignedClients,
+      setDemoClients,
+      setClientFetchError,
+      setIsLoadingClients,
+    ],
+  );
+
+  const handleUpdateFirmEmployee = useCallback(
+    async (userId: string, updates: Omit<FirmEmployeeFormInput, "email">) => {
+      if (!primaryOwnerMembership) {
+        throw new Error("Only firm owners can manage employee access.");
+      }
+
+      setFirmDataError(null);
+      await updateFirmEmployee({
+        firmId: primaryOwnerMembership.firmId,
+        userId,
+        updates,
+      });
+
+      const refreshedEmployees = await fetchFirmEmployees(primaryOwnerMembership.firmId);
+      setFirmEmployeeMap((previous) => ({
+        ...previous,
+        [primaryOwnerMembership.firmId]: refreshedEmployees,
+      }));
+    },
+    [primaryOwnerMembership, setFirmEmployeeMap, setFirmDataError],
+  );
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 pb-16">
-      <header className="relative overflow-hidden bg-slate-900 text-white shadow-2xl shadow-slate-900/30">
-        <HeroBackdrop />
-        <div className="relative mx-auto flex w-full flex-col gap-10 px-4 py-12 sm:px-[5vw]">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-xl space-y-4">
+    <>
+      <FirmDashboardOverlay
+        isOpen={dashboardIsVisible}
+        onClose={closeDashboard}
+        activeClientId={activeClientId || null}
+        assignedClients={assignedClients}
+        demoClients={demoClients}
+        onSelectClient={handleDashboardClientSelect}
+        isLoadingClients={isLoadingClients}
+        clientFetchError={clientFetchError}
+        ownerFirm={primaryOwnerMembership}
+        ownerFirmEmployees={ownerEmployees}
+        ownerFirmCompanies={ownerCompanies}
+        isLoadingFirmData={isLoadingFirmData}
+        firmDataError={firmDataError}
+        onCreateEmployee={handleCreateFirmEmployee}
+        onUpdateEmployee={handleUpdateFirmEmployee}
+        onCreateCompany={handleCreateFirmCompany}
+      />
+      <main
+        aria-hidden={dashboardIsVisible}
+        className={`min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 pb-16 transition-opacity duration-200 ${
+          dashboardIsVisible ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
+      >
+        <header className="relative overflow-hidden bg-slate-900 text-white shadow-2xl shadow-slate-900/30">
+          <HeroBackdrop />
+          <div className="relative mx-auto flex w-full flex-col gap-10 px-4 py-12 sm:px-[5vw]">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-xl space-y-4">
               <p className="text-sm font-semibold uppercase tracking-[0.35em] text-sky-200/80">Client dashboard</p>
               <div className="space-y-2">
                 <h1 className="text-4xl font-semibold tracking-tight">Profit First forecast</h1>
@@ -814,6 +1076,7 @@ export default function HomePage() {
               <button
                 type="button"
                 className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-[0.7rem] font-semibold text-white/80 transition hover:bg-white/20"
+                onClick={openDashboard}
               >
                 Manage client access
               </button>
@@ -1026,6 +1289,7 @@ export default function HomePage() {
           </div>
         </section>
       </div>
-    </main>
+      </main>
+    </>
   );
 }

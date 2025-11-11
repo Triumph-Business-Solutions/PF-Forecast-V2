@@ -54,6 +54,7 @@ function createSummary(row: CompanyRow, accessLevel?: PlatformRole): ClientSumma
     activeSince: formatActiveSince(row.active_since),
     description: row.description ?? undefined,
     accessLevel,
+    firmId: row.firm_id ?? undefined,
   };
 }
 

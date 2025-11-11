@@ -1,14 +1,40 @@
--- Seed demo users for testing firm and company roles.
--- Stable UUIDs ensure deterministic references across environments.
 
-insert into public.users (id, email)
+-- Ensure optional profile fields exist before inserting demo data.
+alter table public.users
+  add column if not exists display_name text,
+  add column if not exists phone_number text;
+
+insert into public.users (id, email, display_name, phone_number)
 values
-  ('00000000-0000-0000-0000-00000000d201', 'demo-firm-owner@example.com'),
-  ('00000000-0000-0000-0000-00000000d202', 'demo-firm-employee@example.com'),
-  ('00000000-0000-0000-0000-00000000d203', 'demo-triumph-owner@example.com'),
-  ('00000000-0000-0000-0000-00000000d204', 'demo-acme-owner@example.com')
+  (
+    '00000000-0000-0000-0000-00000000d201',
+    'demo-firm-owner@example.com',
+    'Demo Firm Owner',
+    '+1 (555) 010-1001'
+  ),
+  (
+    '00000000-0000-0000-0000-00000000d202',
+    'demo-firm-employee@example.com',
+    'Demo Firm Employee',
+    '+1 (555) 010-2002'
+  ),
+  (
+    '00000000-0000-0000-0000-00000000d203',
+    'demo-company-owner@example.com',
+    'Demo Company Owner',
+    '+1 (555) 010-3003'
+  ),
+  (
+    '00000000-0000-0000-0000-00000000d204',
+    'demo-second-company-owner@example.com',
+    'Demo Second Company Owner',
+    '+1 (555) 010-4004'
+  )
 on conflict (id) do update
-set email = excluded.email;
+set
+  email = excluded.email,
+  display_name = excluded.display_name,
+  phone_number = excluded.phone_number;
 
 insert into public.firm_members (firm_id, user_id, role, invited_at, accepted_at)
 values
