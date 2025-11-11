@@ -66,15 +66,30 @@ export async function upsertAllocationCadenceSettings(
     next_allocation_date: input.nextAllocationDate,
   } satisfies AllocationCadenceRow;
 
-  const { data, error } = await supabase
+  const updateResult = await supabase
     .from("allocation_cadence_settings")
-    .upsert(payload, { onConflict: "company_id" })
+    .update(payload)
+    .eq("company_id", companyId)
+    .select(SELECT_FIELDS)
+    .maybeSingle<AllocationCadenceRow>();
+
+  if (updateResult.error) {
+    return { data: null, error: updateResult.error };
+  }
+
+  if (updateResult.data) {
+    return { data: mapRowToSettings(updateResult.data), error: null };
+  }
+
+  const insertResult = await supabase
+    .from("allocation_cadence_settings")
+    .insert(payload)
     .select(SELECT_FIELDS)
     .single<AllocationCadenceRow>();
 
-  if (error) {
-    return { data: null, error };
+  if (insertResult.error) {
+    return { data: null, error: insertResult.error };
   }
 
-  return { data: mapRowToSettings(data), error: null };
+  return { data: mapRowToSettings(insertResult.data), error: null };
 }
