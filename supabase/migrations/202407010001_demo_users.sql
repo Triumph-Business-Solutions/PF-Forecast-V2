@@ -23,6 +23,12 @@ values
     'demo-company-owner@example.com',
     'Demo Company Owner',
     '+1 (555) 010-3003'
+  ),
+  (
+    '00000000-0000-0000-0000-00000000d204',
+    'demo-second-company-owner@example.com',
+    'Demo Second Company Owner',
+    '+1 (555) 010-4004'
   )
 on conflict (id) do update
 set
