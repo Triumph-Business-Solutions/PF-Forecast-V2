@@ -85,6 +85,7 @@ export async function fetchClientWorkspaces(userId?: string | null): Promise<Cli
   const firmAccess = new Map<string, PlatformRole>();
   const errors: string[] = [];
   let isCompanyOwnerOnly = false;
+  const companyOwnerCompanyIds = new Set<string>();
 
   if (userId) {
     const { data: membershipRows, error: membershipError } = await supabase
@@ -100,6 +101,9 @@ export async function fetchClientWorkspaces(userId?: string | null): Promise<Cli
     const membershipCompanyIds = safeMembershipRows.map((row) => row.company_id);
     safeMembershipRows.forEach((row) => {
       membershipAccess.set(row.company_id, row.access_level);
+      if (row.access_level === "company_owner") {
+        companyOwnerCompanyIds.add(row.company_id);
+      }
     });
 
     const membershipRoles = new Set<PlatformRole>(safeMembershipRows.map((row) => row.access_level));
@@ -179,6 +183,22 @@ export async function fetchClientWorkspaces(userId?: string | null): Promise<Cli
       const summary = createSummary(companyRow, accessLevel);
       upsertSummary(demoMap, summary);
     });
+  }
+
+  if (isCompanyOwnerOnly && companyOwnerCompanyIds.size > 0) {
+    const isAllowed = (id: string) => companyOwnerCompanyIds.has(id);
+
+    for (const key of Array.from(assignedMap.keys())) {
+      if (!isAllowed(key)) {
+        assignedMap.delete(key);
+      }
+    }
+
+    for (const key of Array.from(demoMap.keys())) {
+      if (!isAllowed(key)) {
+        demoMap.delete(key);
+      }
+    }
   }
 
   const assigned = Array.from(assignedMap.values()).sort((a, b) => a.name.localeCompare(b.name));

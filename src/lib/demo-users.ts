@@ -4,6 +4,7 @@ export type DemoUserDefinition = {
   displayName: string;
   role: "firm_owner" | "firm_employee" | "company_owner";
   description: string;
+  companyId?: string;
 };
 
 export const DEMO_USERS: DemoUserDefinition[] = [
@@ -27,6 +28,7 @@ export const DEMO_USERS: DemoUserDefinition[] = [
     displayName: "Triumph Demo Owner",
     role: "company_owner",
     description: "Company owner view for the Triumph Demo workspace.",
+    companyId: "00000000-0000-0000-0000-00000000d101",
   },
   {
     id: "00000000-0000-0000-0000-00000000d204",
@@ -34,6 +36,7 @@ export const DEMO_USERS: DemoUserDefinition[] = [
     displayName: "Acme Plumbing Owner",
     role: "company_owner",
     description: "Company owner view for the Acme Plumbing workspace.",
+    companyId: "00000000-0000-0000-0000-00000000d102",
   },
 ];
 

@@ -369,8 +369,19 @@ export default function HomePage() {
           return;
         }
 
-        setAssignedClients(result.assigned);
-        setDemoClients(result.demos);
+        let nextAssigned = result.assigned;
+        let nextDemos = result.demos;
+
+        if (demoUser?.role === "company_owner" && demoUser.companyId) {
+          const allowedCompanyId = demoUser.companyId;
+          const allowMatch = (client: ClientSummary) => client.id === allowedCompanyId;
+
+          nextAssigned = nextAssigned.filter(allowMatch);
+          nextDemos = nextDemos.filter(allowMatch);
+        }
+
+        setAssignedClients(nextAssigned);
+        setDemoClients(nextDemos);
 
         if (result.errors.length > 0) {
           const hasAssigned = result.assigned.length > 0;
@@ -397,8 +408,14 @@ export default function HomePage() {
           const demosOnly = await fetchClientWorkspaces(null);
 
           if (isMounted) {
+            let fallbackDemos = demosOnly.demos;
+
+            if (demoUser?.role === "company_owner" && demoUser.companyId) {
+              fallbackDemos = fallbackDemos.filter((client) => client.id === demoUser.companyId);
+            }
+
             setAssignedClients([]);
-            setDemoClients(demosOnly.demos);
+            setDemoClients(fallbackDemos);
           }
         } catch (fallbackError) {
           console.error("Failed to load demo workspaces.", fallbackError);

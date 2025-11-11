@@ -10,6 +10,7 @@ export interface DemoUserSelection {
   displayName: string;
   role: string;
   description: string;
+  companyId?: string;
 }
 
 type DemoAuthContextValue = {
