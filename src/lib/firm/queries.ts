@@ -37,6 +37,20 @@ type EmployeeRow = {
   } | null;
 };
 
+type RawAssignmentRow = {
+  user_id: string;
+  company_id: string;
+  companies: {
+    id: string;
+    name: string | null;
+    firm_id: string | null;
+  }[] | {
+    id: string;
+    name: string | null;
+    firm_id: string | null;
+  } | null;
+};
+
 type AssignmentRow = {
   user_id: string;
   company_id: string;
@@ -118,14 +132,18 @@ export async function fetchFirmEmployees(firmId: string): Promise<FirmEmployeeSu
   const assignmentsByUser = new Map<string, { ids: string[]; names: string[] }>();
 
   (assignmentRows ?? []).forEach((rawRow) => {
-    const row = rawRow as AssignmentRow;
-    if (!row.companies || row.companies.firm_id !== firmId) {
+    const row = rawRow as RawAssignmentRow;
+    const companyDetails = Array.isArray(row.companies)
+      ? row.companies[0] ?? null
+      : row.companies;
+
+    if (!companyDetails || companyDetails.firm_id !== firmId) {
       return;
     }
 
     const entry = assignmentsByUser.get(row.user_id) ?? { ids: [], names: [] };
     entry.ids.push(row.company_id);
-    entry.names.push(row.companies.name ?? "Untitled client");
+    entry.names.push(companyDetails.name ?? "Untitled client");
     assignmentsByUser.set(row.user_id, entry);
   });
 
