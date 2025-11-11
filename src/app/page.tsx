@@ -6,6 +6,9 @@ import { ROLE_DEFINITIONS } from "@/lib/auth/roles";
 import { supabase } from "@/lib/supabase";
 import type { ClientSummary } from "@/types/clients";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import { useDemoAuth } from "@/components/demo-auth-provider";
 
 type TrendPoint = {
   label: string;
@@ -324,12 +327,19 @@ export default function HomePage() {
   const [cadence, setCadence] = useState<Cadence>("Monthly");
   const [trendView, setTrendView] = useState<TrendView>("Total");
   const roleTitleMap = useMemo(() => new Map(ROLE_DEFINITIONS.map((role) => [role.id, role.title])), []);
+  const router = useRouter();
+  const { user: demoUser, isLoading: isLoadingDemoUser } = useDemoAuth();
+  const [hasSupabaseSession, setHasSupabaseSession] = useState<boolean | null>(null);
   const [assignedClients, setAssignedClients] = useState<ClientSummary[]>([]);
   const [demoClients, setDemoClients] = useState<ClientSummary[]>([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [clientFetchError, setClientFetchError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isLoadingDemoUser) {
+      return;
+    }
+
     let isMounted = true;
 
     const loadClients = async () => {
@@ -337,13 +347,22 @@ export default function HomePage() {
       setClientFetchError(null);
 
       try {
-        const { data: userData, error: userError } = await supabase.auth.getUser();
+        let userId: string | null = null;
 
-        if (userError) {
-          throw userError;
+        if (demoUser) {
+          userId = demoUser.id;
+          setHasSupabaseSession(false);
+        } else {
+          const { data: userData, error: userError } = await supabase.auth.getUser();
+
+          if (userError) {
+            throw userError;
+          }
+
+          userId = userData.user?.id ?? null;
+          setHasSupabaseSession(Boolean(userId));
         }
 
-        const userId = userData.user?.id ?? null;
         const result = await fetchClientWorkspaces(userId);
 
         if (!isMounted) {
@@ -361,7 +380,9 @@ export default function HomePage() {
               : "We couldn't load your assigned clients. Demo workspaces are still available.",
           );
         } else if (!userId) {
-          setClientFetchError("Sign in to view your assigned clients. Demo workspaces are available to explore.");
+          setClientFetchError(
+            "Select a demo user to view assigned clients. Demo workspaces are available to explore.",
+          );
         } else {
           setClientFetchError(null);
         }
@@ -389,6 +410,9 @@ export default function HomePage() {
         }
 
         setClientFetchError("We couldn't verify your account. Demo workspaces are available while we investigate.");
+        if (isMounted) {
+          setHasSupabaseSession(false);
+        }
       } finally {
         if (isMounted) {
           setIsLoadingClients(false);
@@ -401,7 +425,17 @@ export default function HomePage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [demoUser, isLoadingDemoUser]);
+
+  useEffect(() => {
+    if (isLoadingDemoUser) {
+      return;
+    }
+
+    if (!demoUser && hasSupabaseSession === false) {
+      router.replace("/login");
+    }
+  }, [demoUser, hasSupabaseSession, isLoadingDemoUser, router]);
 
   const trendSeries = useMemo(() => {
     const sourceSeries = cadence === "Monthly" ? (trendView === "Total" ? [{
