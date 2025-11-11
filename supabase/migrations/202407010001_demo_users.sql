@@ -1,5 +1,8 @@
--- Seed demo users for testing firm and company roles.
--- Stable UUIDs ensure deterministic references across environments.
+
+-- Ensure optional profile fields exist before inserting demo data.
+alter table public.users
+  add column if not exists display_name text,
+  add column if not exists phone_number text;
 
 insert into public.users (id, email, display_name, phone_number)
 values
