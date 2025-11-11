@@ -57,12 +57,16 @@ export function AppHeader() {
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-5 w-5"
               >
-                <path
-                  fillRule="evenodd"
-                  clipRule="evenodd"
-                  d="M12 2c.34 0 .65.17.84.46l1.08 1.62c.59.1 1.16.27 1.7.5l1.9-1.04a1 1 0 011.32.36l1.68 2.9a1 1 0 01-.25 1.3l-1.62 1.24c.08.37.13.74.13 1.13 0 .39-.05.76-.13 1.13l1.62 1.24a1 1 0 01.25 1.3l-1.68 2.9a1 1 0 01-1.32.36l-1.9-1.04c-.54.23-1.11.4-1.7.5l-1.08 1.62a1 1 0 01-1.68 0l-1.08-1.62a7.98 7.98 0 01-1.7-.5l-1.9 1.04a1 1 0 01-1.32-.36l-1.68-2.9a1 1 0 01.25-1.3l1.62-1.24A6.54 6.54 0 014 12c0-.39.05-.76.13-1.13L2.51 9.62a1 1 0 01-.25-1.3l1.68-2.9a1 1 0 011.32-.36l1.9 1.04c.54-.23 1.11-.4 1.7-.5L11.16 2.46A1 1 0 0112 2zm0 6a4 4 0 100 8 4 4 0 000-8z"
-                  fill="currentColor"
-                />
+                <circle cx="12" cy="12" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+                <circle cx="12" cy="12" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M12 6.5V4.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M15.89 8.11 17.52 6.48" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M17.5 12h2.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M15.89 15.89 17.52 17.52" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M12 17.5v2.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M8.11 15.89 6.48 17.52" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M6.5 12H4.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M8.11 8.11 6.48 6.48" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </span>
           )}
