@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HeroBackdrop } from "@/components/hero-backdrop";
-import { useMemo, useState } from "react";
 
 type SectionItem = {
   title: string;
@@ -100,6 +99,7 @@ const initialSectionKey = sections[0]?.key ?? "";
 export default function SettingsPage() {
   const [selectedSectionKey, setSelectedSectionKey] = useState<string>(initialSectionKey);
   const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const selectionMemory = useRef<Record<string, string | null>>({});
   const isFirmOwner = false;
 
@@ -163,8 +163,17 @@ export default function SettingsPage() {
     if (!section.items?.length) {
       selectionMemory.current[section.key] = null;
       setSelectedItemKey(null);
+      setExpandedSections((previous) => ({
+        ...previous,
+        [section.key]: false,
+      }));
       return;
     }
+
+    setExpandedSections((previous) => ({
+      ...previous,
+      [section.key]: previous[section.key] ?? false,
+    }));
 
     const existingSelection = selectionMemory.current[section.key];
     const firstAccessibleItem = section.items.find((item) => (item.requiresFirmOwner ? isFirmOwner : true));
@@ -185,6 +194,15 @@ export default function SettingsPage() {
       visibleSelectedItems.find((item) => getItemIdentifier(selectedSection.key, item) === selectedItemKey) ?? null,
     [selectedItemKey, selectedSection.key, visibleSelectedItems],
   );
+
+  const shouldShowSelectedItems = expandedSections[selectedSection.key] ?? false;
+
+  const toggleSection = (sectionKey: string) => {
+    setExpandedSections((previous) => ({
+      ...previous,
+      [sectionKey]: !previous[sectionKey],
+    }));
+  };
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 pb-16">
@@ -220,15 +238,7 @@ export default function SettingsPage() {
                     <li key={section.key} className="snap-start lg:snap-none">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedSectionKey(section.key);
-                          if (section.items?.length) {
-                            setExpandedSections((previous) => ({
-                              ...previous,
-                              [section.key]: previous[section.key] ?? false,
-                            }));
-                          }
-                        }}
+                        onClick={() => handleSectionSelect(section)}
                         className={`w-full rounded-xl border px-5 py-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${
                           selectedSectionKey === section.key
                             ? "border-brand-200 bg-brand-50/80 text-slate-900 shadow"
@@ -288,13 +298,46 @@ export default function SettingsPage() {
               <p className="text-sm text-slate-600">{selectedSection.description}</p>
             </header>
 
-            {hasSelectedItems && shouldShowSelectedItems && visibleSelectedItems && (
+            {hasSelectedItems && shouldShowSelectedItems && visibleSelectedItems.length > 0 && (
               <div className="mt-6 space-y-4">
-                {visibleSelectedItems.map((item) => (
-                  <div key={item.title} className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 shadow-inner shadow-white">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {visibleSelectedItems.map((item) => {
+                    const identifier = getItemIdentifier(selectedSection.key, item);
+                    const isActive = identifier === selectedItemKey;
+
+                    return (
+                      <button
+                        key={identifier}
+                        type="button"
+                        onClick={() => handleItemSelect(selectedSection.key, item)}
+                        className={`rounded-2xl border p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${
+                          isActive
+                            ? "border-brand-200 bg-brand-50/80 text-slate-900 shadow"
+                            : "border-slate-200/80 bg-white/80 text-slate-700 hover:border-slate-300 hover:text-slate-900"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Workflow focus</p>
+                            <h3 className="text-lg font-semibold text-slate-900">{item.title}</h3>
+                          </div>
+                          {item.status && (
+                            <span className="inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-700">
+                              {statusCopy[item.status]}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-3 text-sm text-slate-700">{item.description}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {selectedItem && (
+                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 shadow-inner shadow-white">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Workflow focus</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Selected workflow</p>
                         <h3 className="text-xl font-semibold text-slate-900">{selectedItem.title}</h3>
                       </div>
                       {selectedItem.status && (
@@ -305,8 +348,9 @@ export default function SettingsPage() {
                     </div>
                     <p className="mt-3 text-sm text-slate-700">{selectedItem.description}</p>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+            )}
 
             {hasSelectedItems && !shouldShowSelectedItems && (
               <p className="mt-6 text-xs text-slate-500">
@@ -314,19 +358,18 @@ export default function SettingsPage() {
               </p>
             )}
 
-              {!hasSelectedItems && (
-                <span className="mt-6 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  Placeholder
-                </span>
-              )}
+            {!hasSelectedItems && (
+              <span className="mt-6 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Placeholder
+              </span>
+            )}
 
-              {hasSelectedItems && hiddenFirmOwnerItems && !isFirmOwner && (
-                <p className="mt-6 text-xs text-amber-600">
-                  Firm-only controls are hidden here and will display automatically when a firm owner is signed in.
-                </p>
-              )}
-            </article>
-          </div>
+            {hasSelectedItems && hiddenFirmOwnerItems && !isFirmOwner && (
+              <p className="mt-6 text-xs text-amber-600">
+                Firm-only controls are hidden here and will display automatically when a firm owner is signed in.
+              </p>
+            )}
+          </article>
         </section>
       </div>
     </main>
