@@ -12,7 +12,7 @@ import type { PlatformRole } from "@/lib/auth/roles";
 type FirmMembershipRow = {
   firm_id: string;
   role: PlatformRole;
-  firms: { name: string | null } | null;
+  firms: { name: string | null }[] | { name: string | null } | null;
 };
 
 type EmployeeRow = {
@@ -51,10 +51,14 @@ export async function fetchFirmMemberships(userId: string): Promise<FirmMembersh
 
   return (data ?? []).map((row) => {
     const membership = row as FirmMembershipRow;
+    const firmDetails = Array.isArray(membership.firms)
+      ? membership.firms[0]
+      : membership.firms;
+
     return {
       firmId: membership.firm_id,
       role: membership.role,
-      firmName: membership.firms?.name ?? "Untitled firm",
+      firmName: firmDetails?.name ?? "Untitled firm",
     } satisfies FirmMembershipSummary;
   });
 }
