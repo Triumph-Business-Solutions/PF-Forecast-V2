@@ -78,13 +78,16 @@ function recordError(errors: string[], message: string, error: PostgrestError | 
   errors.push(message);
 }
 
-export async function fetchClientWorkspaces(userId?: string | null): Promise<ClientWorkspaceResult> {
+export async function fetchClientWorkspaces(
+  userId?: string | null,
+  expectedRole?: PlatformRole | null,
+): Promise<ClientWorkspaceResult> {
   const assignedMap = new Map<string, ClientSummary>();
   const demoMap = new Map<string, ClientSummary>();
   const membershipAccess = new Map<string, PlatformRole>();
   const firmAccess = new Map<string, PlatformRole>();
   const errors: string[] = [];
-  let isCompanyOwnerOnly = false;
+  let isCompanyOwnerOnly = expectedRole === "company_owner";
   const companyOwnerCompanyIds = new Set<string>();
 
   if (userId) {
@@ -107,7 +110,10 @@ export async function fetchClientWorkspaces(userId?: string | null): Promise<Cli
     });
 
     const membershipRoles = new Set<PlatformRole>(safeMembershipRows.map((row) => row.access_level));
-    isCompanyOwnerOnly = membershipRoles.size > 0 && membershipRoles.size === 1 && membershipRoles.has("company_owner");
+    if (membershipRoles.size > 0) {
+      isCompanyOwnerOnly =
+        membershipRoles.size === 1 && membershipRoles.has("company_owner");
+    }
 
     if (membershipCompanyIds.length > 0) {
       const { data: assignedCompanies, error: assignedError } = await supabase

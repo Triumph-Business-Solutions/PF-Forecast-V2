@@ -363,7 +363,7 @@ export default function HomePage() {
           setHasSupabaseSession(Boolean(userId));
         }
 
-        const result = await fetchClientWorkspaces(userId);
+        const result = await fetchClientWorkspaces(userId, demoUser?.role ?? null);
 
         if (!isMounted) {
           return;
