@@ -2,6 +2,10 @@
 
 import { HeroBackdrop } from "@/components/hero-backdrop";
 import { useMemo, useState } from "react";
+import { ROLE_DEFINITIONS } from "@/lib/auth/roles";
+import { DEMO_CLIENTS } from "@/lib/clients/demo";
+import type { ClientSummary } from "@/types/clients";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type TrendPoint = {
   label: string;
@@ -380,6 +384,91 @@ export default function HomePage() {
     [cadence, monthlyHeaders.length]
   );
 
+  const assignedClientRoster = useMemo<ClientSummary[]>(
+    () => [
+      {
+        id: "client-aurora-agency",
+        name: "Aurora Agency",
+        activeSince: "September 2022",
+        type: "client",
+        description: "Marketing collective focused on retainer-based profit planning.",
+      },
+      {
+        id: "client-horizon-analytics",
+        name: "Horizon Analytics",
+        activeSince: "May 2023",
+        type: "client",
+        description: "Data consultancy experimenting with scenario planning modules.",
+      },
+    ],
+    [],
+  );
+
+  const availableClients = useMemo<ClientSummary[]>(() => {
+    const roster = new Map<string, ClientSummary>();
+
+    assignedClientRoster.forEach((client) => {
+      roster.set(client.id, client);
+    });
+
+    DEMO_CLIENTS.forEach((client) => {
+      roster.set(client.id, client);
+    });
+
+    return Array.from(roster.values());
+  }, [assignedClientRoster]);
+
+  const [activeClientId, setActiveClientId] = useState<string>(() => availableClients[0]?.id ?? "");
+  const [isClientMenuOpen, setIsClientMenuOpen] = useState(false);
+  const clientMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const clientMenuPanelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!activeClientId && availableClients.length > 0) {
+      setActiveClientId(availableClients[0].id);
+      return;
+    }
+
+    const stillVisible = availableClients.some((client) => client.id === activeClientId);
+    if (!stillVisible) {
+      setActiveClientId(availableClients[0]?.id ?? "");
+    }
+  }, [activeClientId, availableClients]);
+
+  useEffect(() => {
+    if (!isClientMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !clientMenuPanelRef.current?.contains(target) &&
+        !clientMenuButtonRef.current?.contains(target)
+      ) {
+        setIsClientMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsClientMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isClientMenuOpen]);
+
+  const activeClient = availableClients.find((client) => client.id === activeClientId) ?? null;
+  const assignedClients = availableClients.filter((client) => client.type === "client");
+  const demoClients = availableClients.filter((client) => client.type === "demo");
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 pb-16">
       <header className="relative overflow-hidden bg-slate-900 text-white shadow-2xl shadow-slate-900/30">
@@ -391,18 +480,133 @@ export default function HomePage() {
               <div className="space-y-2">
                 <h1 className="text-4xl font-semibold tracking-tight">Profit First forecast</h1>
                 <p className="text-base text-slate-200/80">
-                  Aligns the V2 dashboard with the original layout while keeping all calculations placeholder-ready for the next wiring phase.
+                  Review allocations and metrics for {activeClient ? activeClient.name : "your selected client"}. Demo workspaces
+                  are available so every user can explore the experience without risking production data.
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-wide text-slate-200/80">
-              <span className="rounded-full border border-white/20 px-4 py-2">Active client · Client name</span>
-              <span className="rounded-full border border-white/20 px-4 py-2">Active since Jan 2023</span>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200/80">
+              <div className="relative">
+                <button
+                  ref={clientMenuButtonRef}
+                  type="button"
+                  onClick={() => setIsClientMenuOpen((previous) => !previous)}
+                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-100 transition hover:border-white/40 hover:text-white"
+                  aria-haspopup="listbox"
+                  aria-expanded={isClientMenuOpen}
+                  aria-controls="client-selector-menu"
+                >
+                  <span>Active client · {activeClient ? activeClient.name : "None available"}</span>
+                  <span aria-hidden className={`transition ${isClientMenuOpen ? "rotate-180" : ""}`}>
+                    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M4 6l4 4 4-4"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </button>
+                {isClientMenuOpen ? (
+                  <div
+                    ref={clientMenuPanelRef}
+                    id="client-selector-menu"
+                    role="listbox"
+                    aria-label="Select active client"
+                    className="absolute right-0 z-20 mt-3 w-72 rounded-2xl border border-white/10 bg-white/95 p-2 text-left text-slate-800 shadow-xl shadow-slate-900/40 backdrop-blur"
+                  >
+                    {assignedClients.length > 0 ? (
+                      <div>
+                        <p className="px-2 pb-1 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-500">Your clients</p>
+                        <ul className="space-y-1">
+                          {assignedClients.map((client) => {
+                            const isSelected = client.id === activeClient?.id;
+                            return (
+                              <li key={client.id}>
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => {
+                                    setActiveClientId(client.id);
+                                    setIsClientMenuOpen(false);
+                                  }}
+                                  className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
+                                    isSelected
+                                      ? "bg-slate-900/5 text-slate-900"
+                                      : "text-slate-700 hover:bg-slate-900/5 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-sm font-semibold">{client.name}</span>
+                                  </div>
+                                  <p className="text-xs text-slate-500">Active since {client.activeSince}</p>
+                                  {client.description ? (
+                                    <p className="mt-1 text-[0.65rem] text-slate-500">{client.description}</p>
+                                  ) : null}
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
+                    <div className="mt-2 border-t border-slate-200/60 pt-2">
+                      <p className="px-2 pb-1 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-500">Demo workspaces</p>
+                      <ul className="space-y-1">
+                        {demoClients.map((client) => {
+                          const isSelected = client.id === activeClient?.id;
+                          return (
+                            <li key={client.id}>
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => {
+                                  setActiveClientId(client.id);
+                                  setIsClientMenuOpen(false);
+                                }}
+                                className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
+                                  isSelected
+                                    ? "bg-sky-100 text-slate-900"
+                                    : "text-slate-700 hover:bg-sky-100/70 hover:text-slate-900"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-sm font-semibold">{client.name}</span>
+                                  <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-sky-600">
+                                    Demo
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500">Active since {client.activeSince}</p>
+                                {client.description ? (
+                                  <p className="mt-1 text-[0.65rem] text-slate-500">{client.description}</p>
+                                ) : null}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              {activeClient ? (
+                <span className="rounded-full border border-white/20 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-200/80">
+                  Active since {activeClient.activeSince}
+                </span>
+              ) : (
+                <span className="rounded-full border border-white/20 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-200/80">
+                  No active clients available
+                </span>
+              )}
               <button
                 type="button"
                 className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-[0.7rem] font-semibold text-white/80 transition hover:bg-white/20"
               >
-                Placeholder action
+                Manage client access
               </button>
             </div>
           </div>
