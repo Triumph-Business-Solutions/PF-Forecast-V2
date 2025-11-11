@@ -15,6 +15,7 @@ export function AppHeader() {
   const { openDashboard, resetDashboardSession } = useDashboard();
   const isSettingsPage = pathname?.startsWith("/settings");
   const isHomePage = pathname === "/";
+  const [activeCompanyName, setActiveCompanyName] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") {
