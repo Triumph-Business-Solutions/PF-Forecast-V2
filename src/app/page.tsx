@@ -1,7 +1,6 @@
 "use client";
 
 import { HeroBackdrop } from "@/components/hero-backdrop";
-import { ROLE_DEFINITIONS } from "@/lib/auth/roles";
 import { DEMO_CLIENTS } from "@/lib/clients/demo";
 import type { ClientSummary } from "@/types/clients";
 import { useEffect, useMemo, useRef, useState } from "react";
