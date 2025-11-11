@@ -1,3 +1,5 @@
+import type { PlatformRole } from "@/lib/auth";
+
 export type ClientWorkspaceType = "client" | "demo";
 
 export interface ClientSummary {
@@ -6,4 +8,5 @@ export interface ClientSummary {
   activeSince: string;
   type: ClientWorkspaceType;
   description?: string;
+  accessLevel?: PlatformRole;
 }
