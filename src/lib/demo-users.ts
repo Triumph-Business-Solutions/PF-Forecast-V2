@@ -1,8 +1,10 @@
+import type { PlatformRole } from "@/lib/auth";
+
 export type DemoUserDefinition = {
   id: string;
   email: string;
   displayName: string;
-  role: "firm_owner" | "firm_employee" | "company_owner";
+  role: PlatformRole;
   description: string;
 };
 
@@ -23,10 +25,17 @@ export const DEMO_USERS: DemoUserDefinition[] = [
   },
   {
     id: "00000000-0000-0000-0000-00000000d203",
-    email: "demo-company-owner@example.com",
-    displayName: "Demo Company Owner",
+    email: "demo-triumph-owner@example.com",
+    displayName: "Triumph Demo Owner",
     role: "company_owner",
-    description: "Company owner view focused on Profit First allocations.",
+    description: "Company owner view for the Triumph Demo workspace.",
+  },
+  {
+    id: "00000000-0000-0000-0000-00000000d204",
+    email: "demo-acme-owner@example.com",
+    displayName: "Acme Plumbing Owner",
+    role: "company_owner",
+    description: "Company owner view for the Acme Plumbing workspace.",
   },
 ];
 

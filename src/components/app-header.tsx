@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useDemoAuth } from "@/components/demo-auth-provider";
 import { useDashboard } from "@/components/dashboard/dashboard-context";
+import { loadActiveCompany, subscribeToActiveCompanyChanges } from "@/lib/active-company-storage";
 
 export function AppHeader() {
   const pathname = usePathname();
@@ -13,6 +15,21 @@ export function AppHeader() {
   const { openDashboard, resetDashboardSession } = useDashboard();
   const isSettingsPage = pathname?.startsWith("/settings");
   const isHomePage = pathname === "/";
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateActiveCompany = () => {
+      setActiveCompanyName(loadActiveCompany()?.name ?? "");
+    };
+
+    const unsubscribe = subscribeToActiveCompanyChanges(updateActiveCompany);
+    updateActiveCompany();
+
+    return unsubscribe;
+  }, []);
 
   if (pathname === "/login") {
     return null;
@@ -25,6 +42,8 @@ export function AppHeader() {
   const buttonClassName = isHomePage
     ? "bg-white/10 text-white hover:bg-white/20"
     : "bg-slate-900/5 text-slate-700 hover:bg-slate-900/10";
+
+  const activeCompanyLabel = activeCompanyName ? activeCompanyName : "None selected";
 
   const handleSwitchUser = () => {
     resetDashboardSession();
@@ -59,6 +78,15 @@ export function AppHeader() {
               <span className="text-sm font-semibold leading-tight tracking-normal">{user.displayName}</span>
             </div>
           ) : null}
+          <span
+            className={`inline-flex items-center rounded-full px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-[0.3em] ${
+              isHomePage
+                ? "border border-white/25 bg-white/10 text-sky-100"
+                : "border border-slate-200/80 bg-white/80 text-slate-600"
+            }`}
+          >
+            Active company · {activeCompanyLabel}
+          </span>
           {user ? (
             <button
               type="button"

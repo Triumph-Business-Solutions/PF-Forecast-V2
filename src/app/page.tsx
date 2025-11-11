@@ -31,6 +31,11 @@ import type {
   FirmEmployeeMap,
   FirmMembershipSummary,
 } from "@/types/firm";
+import {
+  loadActiveCompany,
+  saveActiveCompany,
+  subscribeToActiveCompanyChanges,
+} from "@/lib/active-company-storage";
 
 type TrendPoint = {
   label: string;
@@ -392,15 +397,17 @@ export default function HomePage() {
           setHasSupabaseSession(Boolean(userId));
         }
 
-        const result = await fetchClientWorkspaces(userId);
+        const result = await fetchClientWorkspaces(userId, demoUser?.role ?? null);
 
         if (!isMounted) {
           return;
         }
 
-        setAssignedClients(result.assigned);
-        setDemoClients(result.demos);
-        setActiveUserId(userId);
+        const nextAssigned = result.assigned;
+        const nextDemos = result.demos;
+
+        setAssignedClients(nextAssigned);
+        setDemoClients(nextDemos);
 
         if (result.errors.length > 0) {
           const hasAssigned = result.assigned.length > 0;
@@ -641,22 +648,86 @@ export default function HomePage() {
     return Array.from(roster.values());
   }, [assignedClients, demoClients]);
 
-  const [activeClientId, setActiveClientId] = useState<string>("");
+  const [activeClientId, setActiveClientId] = useState<string>(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    return loadActiveCompany()?.id ?? "";
+  });
   const [isClientMenuOpen, setIsClientMenuOpen] = useState(false);
   const clientMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const clientMenuPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!activeClientId && availableClients.length > 0) {
-      setActiveClientId(availableClients[0].id);
+    if (typeof window === "undefined") {
       return;
     }
 
-    const stillVisible = availableClients.some((client) => client.id === activeClientId);
-    if (!stillVisible) {
-      setActiveClientId(availableClients[0]?.id ?? "");
+    const updateFromStorage = () => {
+      const stored = loadActiveCompany();
+      const nextId = stored?.id ?? "";
+
+      setActiveClientId((previous) => {
+        if (previous === nextId) {
+          return previous;
+        }
+
+        return nextId;
+      });
+    };
+
+    const unsubscribe = subscribeToActiveCompanyChanges(updateFromStorage);
+    updateFromStorage();
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (availableClients.length === 0) {
+      if (activeClientId) {
+        setActiveClientId("");
+      }
+
+      saveActiveCompany(null);
+      return;
     }
+
+    const stored = typeof window !== "undefined" ? loadActiveCompany() : null;
+    const storedMatch = stored
+      ? availableClients.find((client) => client.id === stored.id)
+      : undefined;
+
+    if (storedMatch) {
+      if (storedMatch.id !== activeClientId) {
+        setActiveClientId(storedMatch.id);
+      } else {
+        saveActiveCompany({ id: storedMatch.id, name: storedMatch.name });
+      }
+
+      return;
+    }
+
+    const currentMatch = activeClientId
+      ? availableClients.find((client) => client.id === activeClientId)
+      : undefined;
+
+    const fallback = currentMatch ?? availableClients[0];
+
+    if (fallback.id !== activeClientId) {
+      setActiveClientId(fallback.id);
+    }
+
+    saveActiveCompany({ id: fallback.id, name: fallback.name });
   }, [activeClientId, availableClients]);
+
+  const canSwitchClients = availableClients.length > 1;
+
+  useEffect(() => {
+    if (!canSwitchClients && isClientMenuOpen) {
+      setIsClientMenuOpen(false);
+    }
+  }, [canSwitchClients, isClientMenuOpen]);
 
   useEffect(() => {
     if (!isClientMenuOpen) {
@@ -841,29 +912,35 @@ export default function HomePage() {
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200/80">
               <div className="relative">
-                <button
-                  ref={clientMenuButtonRef}
-                  type="button"
-                  onClick={() => setIsClientMenuOpen((previous) => !previous)}
-                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-100 transition hover:border-white/40 hover:text-white"
-                  aria-haspopup="listbox"
-                  aria-expanded={isClientMenuOpen}
-                  aria-controls="client-selector-menu"
-                >
-                  <span>Active client · {activeClient ? activeClient.name : "None available"}</span>
-                  <span aria-hidden className={`transition ${isClientMenuOpen ? "rotate-180" : ""}`}>
-                    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        d="M4 6l4 4 4-4"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                </button>
-                {isClientMenuOpen ? (
+                {canSwitchClients ? (
+                  <button
+                    ref={clientMenuButtonRef}
+                    type="button"
+                    onClick={() => setIsClientMenuOpen((previous) => !previous)}
+                    className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-100 transition hover:border-white/40 hover:text-white"
+                    aria-haspopup="listbox"
+                    aria-expanded={isClientMenuOpen}
+                    aria-controls="client-selector-menu"
+                  >
+                    <span>Active client · {activeClient ? activeClient.name : "None available"}</span>
+                    <span aria-hidden className={`transition ${isClientMenuOpen ? "rotate-180" : ""}`}>
+                      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                          d="M4 6l4 4 4-4"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-200">
+                    <span>Active client · {activeClient ? activeClient.name : "None available"}</span>
+                  </div>
+                )}
+                {canSwitchClients && isClientMenuOpen ? (
                   <div
                     ref={clientMenuPanelRef}
                     id="client-selector-menu"
@@ -893,6 +970,7 @@ export default function HomePage() {
                                       aria-selected={isSelected}
                                       onClick={() => {
                                         setActiveClientId(client.id);
+                                        saveActiveCompany({ id: client.id, name: client.name });
                                         setIsClientMenuOpen(false);
                                       }}
                                       className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
@@ -942,6 +1020,7 @@ export default function HomePage() {
                                       aria-selected={isSelected}
                                       onClick={() => {
                                         setActiveClientId(client.id);
+                                        saveActiveCompany({ id: client.id, name: client.name });
                                         setIsClientMenuOpen(false);
                                       }}
                                       className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${

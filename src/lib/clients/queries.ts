@@ -79,12 +79,17 @@ function recordError(errors: string[], message: string, error: PostgrestError | 
   errors.push(message);
 }
 
-export async function fetchClientWorkspaces(userId?: string | null): Promise<ClientWorkspaceResult> {
+export async function fetchClientWorkspaces(
+  userId?: string | null,
+  expectedRole?: PlatformRole | null,
+): Promise<ClientWorkspaceResult> {
   const assignedMap = new Map<string, ClientSummary>();
   const demoMap = new Map<string, ClientSummary>();
   const membershipAccess = new Map<string, PlatformRole>();
   const firmAccess = new Map<string, PlatformRole>();
   const errors: string[] = [];
+  let isCompanyOwnerOnly = expectedRole === "company_owner";
+  const companyOwnerCompanyIds = new Set<string>();
 
   if (userId) {
     const { data: membershipRows, error: membershipError } = await supabase
@@ -100,7 +105,16 @@ export async function fetchClientWorkspaces(userId?: string | null): Promise<Cli
     const membershipCompanyIds = safeMembershipRows.map((row) => row.company_id);
     safeMembershipRows.forEach((row) => {
       membershipAccess.set(row.company_id, row.access_level);
+      if (row.access_level === "company_owner") {
+        companyOwnerCompanyIds.add(row.company_id);
+      }
     });
+
+    const membershipRoles = new Set<PlatformRole>(safeMembershipRows.map((row) => row.access_level));
+    if (membershipRoles.size > 0) {
+      isCompanyOwnerOnly =
+        membershipRoles.size === 1 && membershipRoles.has("company_owner");
+    }
 
     if (membershipCompanyIds.length > 0) {
       const { data: assignedCompanies, error: assignedError } = await supabase
@@ -119,56 +133,80 @@ export async function fetchClientWorkspaces(userId?: string | null): Promise<Cli
       });
     }
 
-    const { data: firmMembershipRows, error: firmMembershipError } = await supabase
-      .from("firm_members")
-      .select("firm_id, role")
-      .eq("user_id", userId);
+    if (!isCompanyOwnerOnly) {
+      const { data: firmMembershipRows, error: firmMembershipError } = await supabase
+        .from("firm_members")
+        .select("firm_id, role")
+        .eq("user_id", userId);
 
-    if (firmMembershipError) {
-      recordError(errors, "Unable to load firm memberships.", firmMembershipError);
-    }
-
-    const safeFirmMembershipRows = (firmMembershipRows ?? []) as FirmMembershipRow[];
-    safeFirmMembershipRows.forEach((row) => {
-      firmAccess.set(row.firm_id, row.role);
-    });
-
-    const firmIds = Array.from(new Set(safeFirmMembershipRows.map((row) => row.firm_id)));
-
-    if (firmIds.length > 0) {
-      const { data: firmCompanies, error: firmCompaniesError } = await supabase
-        .from("companies")
-        .select(COMPANY_FIELDS)
-        .in("firm_id", firmIds);
-
-      if (firmCompaniesError) {
-        recordError(errors, "Unable to load companies for your firm memberships.", firmCompaniesError);
+      if (firmMembershipError) {
+        recordError(errors, "Unable to load firm memberships.", firmMembershipError);
       }
 
-      (firmCompanies ?? []).forEach((company) => {
-        const accessLevel = membershipAccess.get(company.id) ?? firmAccess.get((company as CompanyRow).firm_id ?? "");
-        const summary = createSummary(company as CompanyRow, accessLevel);
-        const targetMap = company.is_demo ? demoMap : assignedMap;
-        upsertSummary(targetMap, summary);
+      const safeFirmMembershipRows = (firmMembershipRows ?? []) as FirmMembershipRow[];
+      safeFirmMembershipRows.forEach((row) => {
+        firmAccess.set(row.firm_id, row.role);
       });
+
+      const firmIds = Array.from(new Set(safeFirmMembershipRows.map((row) => row.firm_id)));
+
+      if (firmIds.length > 0) {
+        const { data: firmCompanies, error: firmCompaniesError } = await supabase
+          .from("companies")
+          .select(COMPANY_FIELDS)
+          .in("firm_id", firmIds);
+
+        if (firmCompaniesError) {
+          recordError(errors, "Unable to load companies for your firm memberships.", firmCompaniesError);
+        }
+
+        (firmCompanies ?? []).forEach((company) => {
+          const accessLevel = membershipAccess.get(company.id) ?? firmAccess.get((company as CompanyRow).firm_id ?? "");
+          const summary = createSummary(company as CompanyRow, accessLevel);
+          const targetMap = company.is_demo ? demoMap : assignedMap;
+          upsertSummary(targetMap, summary);
+        });
+      }
+
+      if (firmIds.length > 0) {
+        isCompanyOwnerOnly = false;
+      }
     }
   }
 
-  const { data: demoCompanies, error: demoError } = await supabase
-    .from("companies")
-    .select(COMPANY_FIELDS)
-    .eq("is_demo", true);
+  if (!isCompanyOwnerOnly) {
+    const { data: demoCompanies, error: demoError } = await supabase
+      .from("companies")
+      .select(COMPANY_FIELDS)
+      .eq("is_demo", true);
 
-  if (demoError) {
-    recordError(errors, "Unable to load demo workspaces.", demoError);
+    if (demoError) {
+      recordError(errors, "Unable to load demo workspaces.", demoError);
+    }
+
+    (demoCompanies ?? []).forEach((company) => {
+      const companyRow = company as CompanyRow;
+      const accessLevel = membershipAccess.get(companyRow.id) ?? firmAccess.get(companyRow.firm_id ?? "");
+      const summary = createSummary(companyRow, accessLevel);
+      upsertSummary(demoMap, summary);
+    });
   }
 
-  (demoCompanies ?? []).forEach((company) => {
-    const companyRow = company as CompanyRow;
-    const accessLevel = membershipAccess.get(companyRow.id) ?? firmAccess.get(companyRow.firm_id ?? "");
-    const summary = createSummary(companyRow, accessLevel);
-    upsertSummary(demoMap, summary);
-  });
+  if (isCompanyOwnerOnly && companyOwnerCompanyIds.size > 0) {
+    const isAllowed = (id: string) => companyOwnerCompanyIds.has(id);
+
+    for (const key of Array.from(assignedMap.keys())) {
+      if (!isAllowed(key)) {
+        assignedMap.delete(key);
+      }
+    }
+
+    for (const key of Array.from(demoMap.keys())) {
+      if (!isAllowed(key)) {
+        demoMap.delete(key);
+      }
+    }
+  }
 
   const assigned = Array.from(assignedMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   const demos = Array.from(demoMap.values()).sort((a, b) => a.name.localeCompare(b.name));
