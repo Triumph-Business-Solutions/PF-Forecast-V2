@@ -1,14 +1,13 @@
--- Seed demo users for testing firm and company roles.
--- Stable UUIDs ensure deterministic references across environments.
+-- Align demo user workspace access with the expected firm and company relationships.
 
-insert into public.users (id, email)
-values
-  ('00000000-0000-0000-0000-00000000d201', 'demo-firm-owner@example.com'),
-  ('00000000-0000-0000-0000-00000000d202', 'demo-firm-employee@example.com'),
-  ('00000000-0000-0000-0000-00000000d203', 'demo-triumph-owner@example.com'),
-  ('00000000-0000-0000-0000-00000000d204', 'demo-acme-owner@example.com')
-on conflict (id) do update
-set email = excluded.email;
+-- Firm owner and firm employee should have deterministic firm memberships.
+delete from public.firm_members
+where user_id in (
+  '00000000-0000-0000-0000-00000000d201',
+  '00000000-0000-0000-0000-00000000d202',
+  '00000000-0000-0000-0000-00000000d203',
+  '00000000-0000-0000-0000-00000000d204'
+);
 
 insert into public.firm_members (firm_id, user_id, role, invited_at, accepted_at)
 values
@@ -31,6 +30,16 @@ set
   role = excluded.role,
   invited_at = excluded.invited_at,
   accepted_at = excluded.accepted_at;
+
+-- Company memberships are scoped per workspace. Company owners must only see their company,
+-- while the firm owner retains visibility across all clients.
+delete from public.company_members
+where user_id in (
+  '00000000-0000-0000-0000-00000000d201',
+  '00000000-0000-0000-0000-00000000d202',
+  '00000000-0000-0000-0000-00000000d203',
+  '00000000-0000-0000-0000-00000000d204'
+);
 
 insert into public.company_members (company_id, user_id, access_level, invited_at, accepted_at)
 values

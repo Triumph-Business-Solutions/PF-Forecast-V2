@@ -1,8 +1,10 @@
+import type { PlatformRole } from "@/lib/auth";
+
 export type DemoUserDefinition = {
   id: string;
   email: string;
   displayName: string;
-  role: "firm_owner" | "firm_employee" | "company_owner";
+  role: PlatformRole;
   description: string;
 };
 
