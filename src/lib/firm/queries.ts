@@ -327,7 +327,7 @@ export async function updateFirmEmployee({
 
   const { data: existingAssignments, error: existingAssignmentsError } = await supabase
     .from("company_members")
-    .select("company_id, companies:companies(firm_id)")
+    .select("company_id, user_id, companies:companies(id, name, firm_id)")
     .eq("user_id", userId)
     .eq("access_level", "firm_employee");
 
@@ -335,8 +335,20 @@ export async function updateFirmEmployee({
     throw formatSupabaseError("Unable to verify current company assignments", existingAssignmentsError);
   }
 
-  const scopedExistingIds = (existingAssignments ?? [])
-    .map((row) => row as AssignmentRow)
+  const resolvedExistingAssignments: AssignmentRow[] = (existingAssignments ?? []).map((rawRow) => {
+    const row = rawRow as RawAssignmentRow;
+    const companyDetails = Array.isArray(row.companies)
+      ? row.companies[0] ?? null
+      : row.companies;
+
+    return {
+      user_id: row.user_id,
+      company_id: row.company_id,
+      companies: companyDetails,
+    } satisfies AssignmentRow;
+  });
+
+  const scopedExistingIds = resolvedExistingAssignments
     .filter((row) => row.companies?.firm_id === firmId)
     .map((row) => row.company_id);
 
