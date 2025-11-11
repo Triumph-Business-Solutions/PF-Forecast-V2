@@ -5,7 +5,8 @@ insert into public.users (id, email)
 values
   ('00000000-0000-0000-0000-00000000d201', 'demo-firm-owner@example.com'),
   ('00000000-0000-0000-0000-00000000d202', 'demo-firm-employee@example.com'),
-  ('00000000-0000-0000-0000-00000000d203', 'demo-company-owner@example.com')
+  ('00000000-0000-0000-0000-00000000d203', 'demo-triumph-owner@example.com'),
+  ('00000000-0000-0000-0000-00000000d204', 'demo-acme-owner@example.com')
 on conflict (id) do update
 set email = excluded.email;
 
@@ -48,8 +49,15 @@ values
     timestamptz '2024-01-01 00:00:00+00'
   ),
   (
-    '00000000-0000-0000-0000-00000000d102',
+    '00000000-0000-0000-0000-00000000d101',
     '00000000-0000-0000-0000-00000000d203',
+    'company_owner',
+    timestamptz '2024-01-01 00:00:00+00',
+    timestamptz '2024-01-01 00:00:00+00'
+  ),
+  (
+    '00000000-0000-0000-0000-00000000d102',
+    '00000000-0000-0000-0000-00000000d204',
     'company_owner',
     timestamptz '2024-01-01 00:00:00+00',
     timestamptz '2024-01-01 00:00:00+00'
