@@ -9,6 +9,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useDemoAuth } from "@/components/demo-auth-provider";
+import {
+  loadActiveCompany,
+  saveActiveCompany,
+  subscribeToActiveCompanyChanges,
+} from "@/lib/active-company-storage";
 
 type TrendPoint = {
   label: string;
@@ -511,21 +516,77 @@ export default function HomePage() {
     return Array.from(roster.values());
   }, [assignedClients, demoClients]);
 
-  const [activeClientId, setActiveClientId] = useState<string>("");
+  const [activeClientId, setActiveClientId] = useState<string>(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    return loadActiveCompany()?.id ?? "";
+  });
   const [isClientMenuOpen, setIsClientMenuOpen] = useState(false);
   const clientMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const clientMenuPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!activeClientId && availableClients.length > 0) {
-      setActiveClientId(availableClients[0].id);
+    if (typeof window === "undefined") {
       return;
     }
 
-    const stillVisible = availableClients.some((client) => client.id === activeClientId);
-    if (!stillVisible) {
-      setActiveClientId(availableClients[0]?.id ?? "");
+    const updateFromStorage = () => {
+      const stored = loadActiveCompany();
+      const nextId = stored?.id ?? "";
+
+      setActiveClientId((previous) => {
+        if (previous === nextId) {
+          return previous;
+        }
+
+        return nextId;
+      });
+    };
+
+    const unsubscribe = subscribeToActiveCompanyChanges(updateFromStorage);
+    updateFromStorage();
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (availableClients.length === 0) {
+      if (activeClientId) {
+        setActiveClientId("");
+      }
+
+      saveActiveCompany(null);
+      return;
     }
+
+    const stored = typeof window !== "undefined" ? loadActiveCompany() : null;
+    const storedMatch = stored
+      ? availableClients.find((client) => client.id === stored.id)
+      : undefined;
+
+    if (storedMatch) {
+      if (storedMatch.id !== activeClientId) {
+        setActiveClientId(storedMatch.id);
+      } else {
+        saveActiveCompany({ id: storedMatch.id, name: storedMatch.name });
+      }
+
+      return;
+    }
+
+    const currentMatch = activeClientId
+      ? availableClients.find((client) => client.id === activeClientId)
+      : undefined;
+
+    const fallback = currentMatch ?? availableClients[0];
+
+    if (fallback.id !== activeClientId) {
+      setActiveClientId(fallback.id);
+    }
+
+    saveActiveCompany({ id: fallback.id, name: fallback.name });
   }, [activeClientId, availableClients]);
 
   useEffect(() => {
@@ -630,6 +691,7 @@ export default function HomePage() {
                                       aria-selected={isSelected}
                                       onClick={() => {
                                         setActiveClientId(client.id);
+                                        saveActiveCompany({ id: client.id, name: client.name });
                                         setIsClientMenuOpen(false);
                                       }}
                                       className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
@@ -679,6 +741,7 @@ export default function HomePage() {
                                       aria-selected={isSelected}
                                       onClick={() => {
                                         setActiveClientId(client.id);
+                                        saveActiveCompany({ id: client.id, name: client.name });
                                         setIsClientMenuOpen(false);
                                       }}
                                       className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
