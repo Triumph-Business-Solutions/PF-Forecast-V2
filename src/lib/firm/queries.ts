@@ -15,6 +15,19 @@ type FirmMembershipRow = {
   firms: { name: string | null }[] | { name: string | null } | null;
 };
 
+type RawEmployeeRow = {
+  user_id: string;
+  users: {
+    display_name: string | null;
+    email: string | null;
+    phone_number: string | null;
+  }[] | {
+    display_name: string | null;
+    email: string | null;
+    phone_number: string | null;
+  } | null;
+};
+
 type EmployeeRow = {
   user_id: string;
   users: {
@@ -74,7 +87,17 @@ export async function fetchFirmEmployees(firmId: string): Promise<FirmEmployeeSu
     throw formatSupabaseError("Unable to load firm employees", employeesError);
   }
 
-  const resolvedEmployeeRows = (employeeRows ?? []) as EmployeeRow[];
+  const resolvedEmployeeRows: EmployeeRow[] = (employeeRows ?? []).map((row) => {
+    const normalizedRow = row as RawEmployeeRow;
+    const userDetails = Array.isArray(normalizedRow.users)
+      ? normalizedRow.users[0] ?? null
+      : normalizedRow.users;
+
+    return {
+      user_id: normalizedRow.user_id,
+      users: userDetails,
+    } satisfies EmployeeRow;
+  });
 
   if (resolvedEmployeeRows.length === 0) {
     return [];
