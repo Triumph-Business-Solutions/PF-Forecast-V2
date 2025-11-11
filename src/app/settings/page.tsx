@@ -2,6 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HeroBackdrop } from "@/components/hero-backdrop";
+import { AllocationCadenceForm } from "@/components/settings/allocation-cadence-form";
+import { supabase } from "@/lib/supabase";
+import { useDemoAuth } from "@/components/demo-auth-provider";
+import { fetchClientWorkspaces } from "@/lib/clients/queries";
+import type { ClientSummary } from "@/types/clients";
+import {
+  loadActiveCompany,
+  saveActiveCompany,
+  subscribeToActiveCompanyChanges,
+} from "@/lib/active-company-storage";
 
 type SectionItem = {
   title: string;
@@ -44,7 +54,7 @@ const sections: SectionDefinition[] = [
       {
         title: "Allocation cadence",
         description: "Schedule how frequently the system should run profit allocations for this company.",
-        status: "upcoming",
+        status: "available",
       },
       {
         title: "Profit distribution",
@@ -95,13 +105,33 @@ const statusCopy: Record<NonNullable<SectionItem["status"]>, string> = {
 };
 
 const initialSectionKey = sections[0]?.key ?? "";
+const DEFAULT_COMPANY_NAME = "None selected";
 
 export default function SettingsPage() {
+  const { user: demoUser, isLoading: isLoadingDemoUser } = useDemoAuth();
   const [selectedSectionKey, setSelectedSectionKey] = useState<string>(initialSectionKey);
   const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const selectionMemory = useRef<Record<string, string | null>>({});
   const isFirmOwner = false;
+  const [activeCompanyId, setActiveCompanyId] = useState<string>(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    return loadActiveCompany()?.id ?? "";
+  });
+  const [displayCompanyName, setDisplayCompanyName] = useState<string>(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_COMPANY_NAME;
+    }
+
+    return loadActiveCompany()?.name ?? DEFAULT_COMPANY_NAME;
+  });
+  const [availableCompanies, setAvailableCompanies] = useState<ClientSummary[]>([]);
+  const [isLoadingCompany, setIsLoadingCompany] = useState<boolean>(false);
+  const [companyError, setCompanyError] = useState<string | null>(null);
+  const [hasResolvedCompanies, setHasResolvedCompanies] = useState(false);
 
   const selectedSection = useMemo(
     () => sections.find((section) => section.key === selectedSectionKey) ?? sections[0],
@@ -119,6 +149,11 @@ export default function SettingsPage() {
   const hiddenFirmOwnerItems = selectedSection?.items?.some((item) => item.requiresFirmOwner) && !isFirmOwner;
 
   const getItemIdentifier = (sectionKey: string, item: SectionItem) => `${sectionKey}:${item.title}`;
+
+  const activeCompany = useMemo(
+    () => availableCompanies.find((company) => company.id === activeCompanyId) ?? null,
+    [activeCompanyId, availableCompanies],
+  );
 
   useEffect(() => {
     if (!selectedSection) {
@@ -183,6 +218,124 @@ export default function SettingsPage() {
     setSelectedItemKey(nextSelection);
   };
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateFromStorage = () => {
+      const stored = loadActiveCompany();
+      setActiveCompanyId(stored?.id ?? "");
+      setDisplayCompanyName(stored?.name ?? DEFAULT_COMPANY_NAME);
+    };
+
+    const unsubscribe = subscribeToActiveCompanyChanges(updateFromStorage);
+    updateFromStorage();
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (isLoadingDemoUser) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const resolveCompanies = async () => {
+      setIsLoadingCompany(true);
+      setCompanyError(null);
+
+      try {
+        let userId: string | null = null;
+
+        if (demoUser) {
+          userId = demoUser.id;
+        } else {
+          const { data: userData, error: userError } = await supabase.auth.getUser();
+
+          if (userError) {
+            throw userError;
+          }
+
+          userId = userData.user?.id ?? null;
+        }
+
+        const result = await fetchClientWorkspaces(userId);
+
+        if (!isMounted) {
+          return;
+        }
+
+        const combined: ClientSummary[] = [...result.assigned, ...result.demos];
+        setAvailableCompanies(combined);
+
+        const stored = typeof window !== "undefined" ? loadActiveCompany() : null;
+        const storedMatch = stored ? combined.find((company) => company.id === stored.id) : null;
+        const fallback = storedMatch ?? combined[0] ?? null;
+
+        if (fallback) {
+          setActiveCompanyId(fallback.id);
+          setDisplayCompanyName(fallback.name);
+        } else {
+          setActiveCompanyId("");
+          setDisplayCompanyName(DEFAULT_COMPANY_NAME);
+        }
+
+        if (result.errors.length > 0) {
+          setCompanyError("Some company records could not be loaded. Demo workspaces remain available.");
+        } else {
+          setCompanyError(null);
+        }
+
+        setHasResolvedCompanies(true);
+      } catch (error) {
+        console.error("Unable to load companies for settings", error);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setAvailableCompanies([]);
+        setActiveCompanyId("");
+        setDisplayCompanyName(DEFAULT_COMPANY_NAME);
+        setCompanyError("We couldn’t load company access for your account. Try again in a moment.");
+        setHasResolvedCompanies(true);
+      } finally {
+        if (isMounted) {
+          setIsLoadingCompany(false);
+        }
+      }
+    };
+
+    void resolveCompanies();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [demoUser, isLoadingDemoUser]);
+
+  useEffect(() => {
+    if (!hasResolvedCompanies) {
+      return;
+    }
+
+    if (!activeCompany) {
+      saveActiveCompany(null);
+      return;
+    }
+
+    saveActiveCompany({ id: activeCompany.id, name: activeCompany.name });
+  }, [activeCompany, hasResolvedCompanies]);
+
+  useEffect(() => {
+    if (activeCompany) {
+      setDisplayCompanyName(activeCompany.name);
+    } else if (!isLoadingCompany && hasResolvedCompanies) {
+      setDisplayCompanyName(DEFAULT_COMPANY_NAME);
+    }
+  }, [activeCompany, hasResolvedCompanies, isLoadingCompany]);
+
   const handleItemSelect = (sectionKey: string, item: SectionItem) => {
     const identifier = getItemIdentifier(sectionKey, item);
     selectionMemory.current[sectionKey] = identifier;
@@ -204,6 +357,15 @@ export default function SettingsPage() {
     }));
   };
 
+  const shouldRenderAllocationCadence =
+    selectedSection.key === "profit-first-setup" && selectedItem?.title === "Allocation cadence";
+  const resolvedCompanyName = activeCompany?.name ?? displayCompanyName;
+  const canRenderCadenceForm =
+    shouldRenderAllocationCadence && Boolean(activeCompanyId) && (!hasResolvedCompanies || Boolean(activeCompany));
+  const shouldShowCadenceSkeleton = shouldRenderAllocationCadence && isLoadingCompany && !activeCompanyId;
+  const shouldShowCadenceUnavailable =
+    shouldRenderAllocationCadence && hasResolvedCompanies && !isLoadingCompany && !activeCompanyId;
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 pb-16">
       <header className="relative overflow-hidden bg-slate-900 text-white shadow-2xl shadow-slate-900/30">
@@ -222,6 +384,14 @@ export default function SettingsPage() {
                   Centralize onboarding tasks, connect bank accounts, and prepare allocation rules. Each module below guides
                   teams through focused configuration flows as functionality rolls out.
                 </p>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200/80">
+                  <span className="inline-flex items-center rounded-full border border-white/30 bg-white/10 px-4 py-1 font-semibold uppercase tracking-[0.35em] text-sky-100">
+                    Active company · {resolvedCompanyName}
+                  </span>
+                  {isLoadingCompany ? (
+                    <span className="text-[0.7rem] text-slate-200/70">Loading company access…</span>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -347,6 +517,29 @@ export default function SettingsPage() {
                       )}
                     </div>
                     <p className="mt-3 text-sm text-slate-700">{selectedItem.description}</p>
+                    {canRenderCadenceForm ? (
+                      <AllocationCadenceForm
+                        companyId={activeCompanyId}
+                        companyName={resolvedCompanyName}
+                        key={activeCompanyId}
+                      />
+                    ) : null}
+                    {shouldShowCadenceSkeleton ? (
+                      <div className="mt-6 space-y-2 text-sm text-slate-500">
+                        <div className="h-4 w-40 animate-pulse rounded bg-slate-200" />
+                        <div className="h-4 w-64 animate-pulse rounded bg-slate-200" />
+                      </div>
+                    ) : null}
+                    {shouldShowCadenceUnavailable ? (
+                      <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                        Select an active company from the dashboard to configure allocation cadence for its forecast.
+                      </div>
+                    ) : null}
+                    {companyError ? (
+                      <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                        {companyError}
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
