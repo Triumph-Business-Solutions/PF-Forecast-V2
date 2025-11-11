@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type SectionItem = {
   title: string;
@@ -16,122 +16,173 @@ type SectionDefinition = {
   items?: SectionItem[];
 };
 
+const sections: SectionDefinition[] = [
+  {
+    key: "onboarding",
+    title: "Onboarding walkthrough",
+    description:
+      "Guide clients through the essential configuration steps with a structured checklist experience.",
+  },
+  {
+    key: "historical-data-import",
+    title: "Historical data import",
+    description:
+      "Upload CSV actuals that will seed forecasting models and inform allocation recommendations.",
+  },
+  {
+    key: "bank-accounts",
+    title: "Bank accounts",
+    description:
+      "Capture opening balances for every active and custom account to establish an accurate cash baseline.",
+  },
+  {
+    key: "profit-first-setup",
+    title: "Profit First setup",
+    description: "Configure allocations, cadence, and tax plans in one place. Expand to preview the upcoming modules.",
+    items: [
+      {
+        title: "Allocation cadence",
+        description: "Schedule how frequently the system should run profit allocations for this company.",
+        status: "upcoming",
+      },
+      {
+        title: "Profit distribution",
+        description: "Define owner payout targets and the workflow for releasing distributions.",
+        status: "upcoming",
+      },
+      {
+        title: "Tax strategy",
+        description: "Plan quarterly set-asides with templates tailored to the company’s tax posture.",
+        status: "upcoming",
+      },
+    ],
+  },
+  {
+    key: "other",
+    title: "Other tools",
+    description:
+      "Administrative utilities that keep teams aligned, maintain visibility, and gather product feedback.",
+    items: [
+      {
+        title: "Manage company users",
+        description: "Invite collaborators and manage access for the current company workspace.",
+        status: "available",
+      },
+      {
+        title: "Manage firm users",
+        description: "Firm owners can manage staff assignments across every connected client organization.",
+        requiresFirmOwner: true,
+        status: "available",
+      },
+      {
+        title: "Audit report",
+        description: "Review a chronological log of configuration changes and the team members behind them.",
+        status: "upcoming",
+      },
+      {
+        title: "Share feedback",
+        description: "Submit product ideas, bug reports, or workflow requests directly to the platform team.",
+        status: "available",
+      },
+    ],
+  },
+];
+
 const statusCopy: Record<NonNullable<SectionItem["status"]>, string> = {
   available: "Available",
   upcoming: "Coming soon",
 };
 
+const initialSectionKey = sections[0]?.key ?? "";
+
 export default function SettingsPage() {
-  const [selectedSectionKey, setSelectedSectionKey] = useState<string>("onboarding");
+  const [selectedSectionKey, setSelectedSectionKey] = useState<string>(initialSectionKey);
   const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
+  const selectionMemory = useRef<Record<string, string | null>>({});
   const isFirmOwner = false;
 
-  const sections = useMemo<SectionDefinition[]>(
-    () => [
-      {
-        key: "onboarding",
-        title: "Onboarding walkthrough",
-        description:
-          "Guide clients through the essential configuration steps with a structured checklist experience.",
-      },
-      {
-        key: "historical-data-import",
-        title: "Historical data import",
-        description:
-          "Upload CSV actuals that will seed forecasting models and inform allocation recommendations.",
-      },
-      {
-        key: "bank-accounts",
-        title: "Bank accounts",
-        description:
-          "Capture opening balances for every active and custom account to establish an accurate cash baseline.",
-      },
-      {
-        key: "profit-first-setup",
-        title: "Profit First setup",
-        description:
-          "Configure allocations, cadence, and tax plans in one place. Expand to preview the upcoming modules.",
-        items: [
-          {
-            title: "Allocation cadence",
-            description: "Schedule how frequently the system should run profit allocations for this company.",
-            status: "upcoming",
-          },
-          {
-            title: "Profit distribution",
-            description: "Define owner payout targets and the workflow for releasing distributions.",
-            status: "upcoming",
-          },
-          {
-            title: "Tax strategy",
-            description: "Plan quarterly set-asides with templates tailored to the company’s tax posture.",
-            status: "upcoming",
-          },
-        ],
-      },
-      {
-        key: "other",
-        title: "Other tools",
-        description:
-          "Administrative utilities that keep teams aligned, maintain visibility, and gather product feedback.",
-        items: [
-          {
-            title: "Manage company users",
-            description: "Invite collaborators and manage access for the current company workspace.",
-            status: "available",
-          },
-          {
-            title: "Manage firm users",
-            description:
-              "Firm owners can manage staff assignments across every connected client organization.",
-            requiresFirmOwner: true,
-            status: "available",
-          },
-          {
-            title: "Audit report",
-            description: "Review a chronological log of configuration changes and the team members behind them.",
-            status: "upcoming",
-          },
-          {
-            title: "Share feedback",
-            description: "Submit product ideas, bug reports, or workflow requests directly to the platform team.",
-            status: "available",
-          },
-        ],
-      },
-    ],
-    [],
+  const selectedSection = useMemo(
+    () => sections.find((section) => section.key === selectedSectionKey) ?? sections[0],
+    [selectedSectionKey],
   );
 
-  const selectedSection = sections.find((section) => section.key === selectedSectionKey) ?? sections[0];
-  const hasSelectedItems = Boolean(selectedSection?.items?.length);
-  const visibleSelectedItems = selectedSection?.items?.filter((item) =>
-    item.requiresFirmOwner ? isFirmOwner : true,
+  const visibleSelectedItems = useMemo(
+    () =>
+      selectedSection?.items?.filter((item) => (item.requiresFirmOwner ? isFirmOwner : true)) ?? [],
+    [selectedSection, isFirmOwner],
   );
+
+  const hasSelectedItems = Boolean(selectedSection?.items?.length);
+  const hasVisibleItems = visibleSelectedItems.length > 0;
   const hiddenFirmOwnerItems = selectedSection?.items?.some((item) => item.requiresFirmOwner) && !isFirmOwner;
 
   const getItemIdentifier = (sectionKey: string, item: SectionItem) => `${sectionKey}:${item.title}`;
 
   useEffect(() => {
-    if (visibleSelectedItems?.length) {
-      setSelectedItemKey((previous) => {
-        const hasExistingSelection = visibleSelectedItems.some(
-          (item) => getItemIdentifier(selectedSection.key, item) === previous,
-        );
-
-        return hasExistingSelection
-          ? previous
-          : getItemIdentifier(selectedSection.key, visibleSelectedItems[0]);
-      });
-    } else {
-      setSelectedItemKey(null);
+    if (!selectedSection) {
+      return;
     }
-  }, [selectedSection.key, visibleSelectedItems]);
 
-  const selectedItem = visibleSelectedItems?.find(
-    (item) => getItemIdentifier(selectedSection.key, item) === selectedItemKey,
+    if (!hasVisibleItems) {
+      if (selectionMemory.current[selectedSection.key]) {
+        selectionMemory.current[selectedSection.key] = null;
+      }
+
+      if (selectedItemKey !== null) {
+        setSelectedItemKey(null);
+      }
+
+      return;
+    }
+
+    const storedSelection = selectionMemory.current[selectedSection.key];
+    const hasStoredSelection = storedSelection
+      ? visibleSelectedItems.some((item) => getItemIdentifier(selectedSection.key, item) === storedSelection)
+      : false;
+
+    if (hasStoredSelection) {
+      if (storedSelection !== selectedItemKey) {
+        setSelectedItemKey(storedSelection);
+      }
+      return;
+    }
+
+    const fallbackIdentifier = getItemIdentifier(selectedSection.key, visibleSelectedItems[0]);
+    selectionMemory.current[selectedSection.key] = fallbackIdentifier;
+
+    if (fallbackIdentifier !== selectedItemKey) {
+      setSelectedItemKey(fallbackIdentifier);
+    }
+  }, [hasVisibleItems, selectedItemKey, selectedSection, visibleSelectedItems]);
+
+  const handleSectionSelect = (section: SectionDefinition) => {
+    setSelectedSectionKey(section.key);
+
+    if (!section.items?.length) {
+      selectionMemory.current[section.key] = null;
+      setSelectedItemKey(null);
+      return;
+    }
+
+    const existingSelection = selectionMemory.current[section.key];
+    const firstAccessibleItem = section.items.find((item) => (item.requiresFirmOwner ? isFirmOwner : true));
+    const nextSelection = existingSelection ?? (firstAccessibleItem ? getItemIdentifier(section.key, firstAccessibleItem) : null);
+
+    selectionMemory.current[section.key] = nextSelection;
+    setSelectedItemKey(nextSelection);
+  };
+
+  const handleItemSelect = (sectionKey: string, item: SectionItem) => {
+    const identifier = getItemIdentifier(sectionKey, item);
+    selectionMemory.current[sectionKey] = identifier;
+    setSelectedItemKey(identifier);
+  };
+
+  const selectedItem = useMemo(
+    () =>
+      visibleSelectedItems.find((item) => getItemIdentifier(selectedSection.key, item) === selectedItemKey) ?? null,
+    [selectedItemKey, selectedSection.key, visibleSelectedItems],
   );
-  const hasVisibleItems = Boolean(visibleSelectedItems?.length);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -156,21 +207,7 @@ export default function SettingsPage() {
                 <li key={section.key} className="snap-start lg:snap-none">
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedSectionKey(section.key);
-                      if (section.items?.length) {
-                        const firstAccessibleItem = section.items.find((item) =>
-                          item.requiresFirmOwner ? isFirmOwner : true,
-                        );
-                        setSelectedItemKey(
-                          firstAccessibleItem
-                            ? getItemIdentifier(section.key, firstAccessibleItem)
-                            : null,
-                        );
-                      } else {
-                        setSelectedItemKey(null);
-                      }
-                    }}
+                    onClick={() => handleSectionSelect(section)}
                     className={`w-full rounded-xl border px-5 py-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 lg:px-4 lg:py-3 ${
                       selectedSectionKey === section.key
                         ? "border-brand-300 bg-brand-50 text-brand-900 shadow-sm"
@@ -204,7 +241,7 @@ export default function SettingsPage() {
                       <li key={itemIdentifier}>
                         <button
                           type="button"
-                          onClick={() => setSelectedItemKey(itemIdentifier)}
+                          onClick={() => handleItemSelect(selectedSection.key, item)}
                           className={`w-full rounded-xl border px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${
                             isActive
                               ? "border-brand-300 bg-brand-50 text-brand-900 shadow-sm"
