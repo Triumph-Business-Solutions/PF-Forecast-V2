@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HeroBackdrop } from "@/components/hero-backdrop";
 import { useMemo, useState } from "react";
 
@@ -17,107 +18,173 @@ type SectionDefinition = {
   items?: SectionItem[];
 };
 
+const sections: SectionDefinition[] = [
+  {
+    key: "onboarding",
+    title: "Onboarding walkthrough",
+    description:
+      "Guide clients through the essential configuration steps with a structured checklist experience.",
+  },
+  {
+    key: "historical-data-import",
+    title: "Historical data import",
+    description:
+      "Upload CSV actuals that will seed forecasting models and inform allocation recommendations.",
+  },
+  {
+    key: "bank-accounts",
+    title: "Bank accounts",
+    description:
+      "Capture opening balances for every active and custom account to establish an accurate cash baseline.",
+  },
+  {
+    key: "profit-first-setup",
+    title: "Profit First setup",
+    description: "Configure allocations, cadence, and tax plans in one place. Expand to preview the upcoming modules.",
+    items: [
+      {
+        title: "Allocation cadence",
+        description: "Schedule how frequently the system should run profit allocations for this company.",
+        status: "upcoming",
+      },
+      {
+        title: "Profit distribution",
+        description: "Define owner payout targets and the workflow for releasing distributions.",
+        status: "upcoming",
+      },
+      {
+        title: "Tax strategy",
+        description: "Plan quarterly set-asides with templates tailored to the company’s tax posture.",
+        status: "upcoming",
+      },
+    ],
+  },
+  {
+    key: "other",
+    title: "Other tools",
+    description:
+      "Administrative utilities that keep teams aligned, maintain visibility, and gather product feedback.",
+    items: [
+      {
+        title: "Manage company users",
+        description: "Invite collaborators and manage access for the current company workspace.",
+        status: "available",
+      },
+      {
+        title: "Manage firm users",
+        description: "Firm owners can manage staff assignments across every connected client organization.",
+        requiresFirmOwner: true,
+        status: "available",
+      },
+      {
+        title: "Audit report",
+        description: "Review a chronological log of configuration changes and the team members behind them.",
+        status: "upcoming",
+      },
+      {
+        title: "Share feedback",
+        description: "Submit product ideas, bug reports, or workflow requests directly to the platform team.",
+        status: "available",
+      },
+    ],
+  },
+];
+
 const statusCopy: Record<NonNullable<SectionItem["status"]>, string> = {
   available: "Available",
   upcoming: "Coming soon",
 };
 
+const initialSectionKey = sections[0]?.key ?? "";
+
 export default function SettingsPage() {
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [selectedSectionKey, setSelectedSectionKey] = useState<string>("onboarding");
+  const [selectedSectionKey, setSelectedSectionKey] = useState<string>(initialSectionKey);
+  const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
+  const selectionMemory = useRef<Record<string, string | null>>({});
   const isFirmOwner = false;
 
-  const sections = useMemo<SectionDefinition[]>(
-    () => [
-      {
-        key: "onboarding",
-        title: "Onboarding walkthrough",
-        description:
-          "Guide clients through the essential configuration steps with a structured checklist experience.",
-      },
-      {
-        key: "historical-data-import",
-        title: "Historical data import",
-        description:
-          "Upload CSV actuals that will seed forecasting models and inform allocation recommendations.",
-      },
-      {
-        key: "bank-accounts",
-        title: "Bank accounts",
-        description:
-          "Capture opening balances for every active and custom account to establish an accurate cash baseline.",
-      },
-      {
-        key: "profit-first-setup",
-        title: "Profit First setup",
-        description:
-          "Configure allocations, cadence, and tax plans in one place. Expand to preview the upcoming modules.",
-        items: [
-          {
-            title: "Allocation cadence",
-            description: "Schedule how frequently the system should run profit allocations for this company.",
-            status: "upcoming",
-          },
-          {
-            title: "Profit distribution",
-            description: "Define owner payout targets and the workflow for releasing distributions.",
-            status: "upcoming",
-          },
-          {
-            title: "Tax strategy",
-            description: "Plan quarterly set-asides with templates tailored to the company’s tax posture.",
-            status: "upcoming",
-          },
-        ],
-      },
-      {
-        key: "other",
-        title: "Other tools",
-        description:
-          "Administrative utilities that keep teams aligned, maintain visibility, and gather product feedback.",
-        items: [
-          {
-            title: "Manage company users",
-            description: "Invite collaborators and manage access for the current company workspace.",
-            status: "available",
-          },
-          {
-            title: "Manage firm users",
-            description:
-              "Firm owners can manage staff assignments across every connected client organization.",
-            requiresFirmOwner: true,
-            status: "available",
-          },
-          {
-            title: "Audit report",
-            description: "Review a chronological log of configuration changes and the team members behind them.",
-            status: "upcoming",
-          },
-          {
-            title: "Share feedback",
-            description: "Submit product ideas, bug reports, or workflow requests directly to the platform team.",
-            status: "available",
-          },
-        ],
-      },
-    ],
-    [],
+  const selectedSection = useMemo(
+    () => sections.find((section) => section.key === selectedSectionKey) ?? sections[0],
+    [selectedSectionKey],
   );
 
-  const toggleSection = (key: string) => {
-    setExpandedSections((previous) => ({
-      ...previous,
-      [key]: !previous[key],
-    }));
+  const visibleSelectedItems = useMemo(
+    () =>
+      selectedSection?.items?.filter((item) => (item.requiresFirmOwner ? isFirmOwner : true)) ?? [],
+    [selectedSection, isFirmOwner],
+  );
+
+  const hasSelectedItems = Boolean(selectedSection?.items?.length);
+  const hasVisibleItems = visibleSelectedItems.length > 0;
+  const hiddenFirmOwnerItems = selectedSection?.items?.some((item) => item.requiresFirmOwner) && !isFirmOwner;
+
+  const getItemIdentifier = (sectionKey: string, item: SectionItem) => `${sectionKey}:${item.title}`;
+
+  useEffect(() => {
+    if (!selectedSection) {
+      return;
+    }
+
+    if (!hasVisibleItems) {
+      if (selectionMemory.current[selectedSection.key]) {
+        selectionMemory.current[selectedSection.key] = null;
+      }
+
+      if (selectedItemKey !== null) {
+        setSelectedItemKey(null);
+      }
+
+      return;
+    }
+
+    const storedSelection = selectionMemory.current[selectedSection.key];
+    const hasStoredSelection = storedSelection
+      ? visibleSelectedItems.some((item) => getItemIdentifier(selectedSection.key, item) === storedSelection)
+      : false;
+
+    if (hasStoredSelection) {
+      if (storedSelection !== selectedItemKey) {
+        setSelectedItemKey(storedSelection);
+      }
+      return;
+    }
+
+    const fallbackIdentifier = getItemIdentifier(selectedSection.key, visibleSelectedItems[0]);
+    selectionMemory.current[selectedSection.key] = fallbackIdentifier;
+
+    if (fallbackIdentifier !== selectedItemKey) {
+      setSelectedItemKey(fallbackIdentifier);
+    }
+  }, [hasVisibleItems, selectedItemKey, selectedSection, visibleSelectedItems]);
+
+  const handleSectionSelect = (section: SectionDefinition) => {
+    setSelectedSectionKey(section.key);
+
+    if (!section.items?.length) {
+      selectionMemory.current[section.key] = null;
+      setSelectedItemKey(null);
+      return;
+    }
+
+    const existingSelection = selectionMemory.current[section.key];
+    const firstAccessibleItem = section.items.find((item) => (item.requiresFirmOwner ? isFirmOwner : true));
+    const nextSelection = existingSelection ?? (firstAccessibleItem ? getItemIdentifier(section.key, firstAccessibleItem) : null);
+
+    selectionMemory.current[section.key] = nextSelection;
+    setSelectedItemKey(nextSelection);
   };
 
-  const selectedSection = sections.find((section) => section.key === selectedSectionKey) ?? sections[0];
-  const hasSelectedItems = Boolean(selectedSection?.items?.length);
-  const visibleSelectedItems = selectedSection?.items?.filter((item) =>
-    item.requiresFirmOwner ? isFirmOwner : true,
+  const handleItemSelect = (sectionKey: string, item: SectionItem) => {
+    const identifier = getItemIdentifier(sectionKey, item);
+    selectionMemory.current[sectionKey] = identifier;
+    setSelectedItemKey(identifier);
+  };
+
+  const selectedItem = useMemo(
+    () =>
+      visibleSelectedItems.find((item) => getItemIdentifier(selectedSection.key, item) === selectedItemKey) ?? null,
+    [selectedItemKey, selectedSection.key, visibleSelectedItems],
   );
-  const shouldShowSelectedItems = hasSelectedItems && (expandedSections[selectedSection.key] ?? false);
-  const hiddenFirmOwnerItems = selectedSection?.items?.some((item) => item.requiresFirmOwner) && !isFirmOwner;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 pb-16">
@@ -183,8 +250,9 @@ export default function SettingsPage() {
             <header className="flex flex-col gap-2">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">Selected module</p>
-                  <h2 className="text-2xl font-semibold text-slate-900">{selectedSection.title}</h2>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Available modules</p>
+                  <h3 className="text-lg font-semibold text-slate-900">{selectedSection.title}</h3>
+                  <p className="text-sm text-slate-600">Choose a workflow to view details.</p>
                 </div>
                 {hasSelectedItems ? (
                   <button
@@ -225,18 +293,20 @@ export default function SettingsPage() {
                 {visibleSelectedItems.map((item) => (
                   <div key={item.title} className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 shadow-inner shadow-white">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="text-base font-semibold text-slate-900">{item.title}</h3>
-                      {item.status && (
-                        <span className="inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-brand-700">
-                          {statusCopy[item.status]}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Workflow focus</p>
+                        <h3 className="text-xl font-semibold text-slate-900">{selectedItem.title}</h3>
+                      </div>
+                      {selectedItem.status && (
+                        <span className="inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-700">
+                          {statusCopy[selectedItem.status]}
                         </span>
                       )}
                     </div>
-                    <p className="mt-2 text-sm text-slate-600">{item.description}</p>
+                    <p className="mt-3 text-sm text-slate-700">{selectedItem.description}</p>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              )}
 
             {hasSelectedItems && !shouldShowSelectedItems && (
               <p className="mt-6 text-xs text-slate-500">
@@ -244,12 +314,19 @@ export default function SettingsPage() {
               </p>
             )}
 
-            {hasSelectedItems && hiddenFirmOwnerItems && !isFirmOwner && (
-              <p className="mt-6 text-xs text-amber-600">
-                Firm-only controls are hidden here and will display automatically when a firm owner is signed in.
-              </p>
-            )}
-          </article>
+              {!hasSelectedItems && (
+                <span className="mt-6 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Placeholder
+                </span>
+              )}
+
+              {hasSelectedItems && hiddenFirmOwnerItems && !isFirmOwner && (
+                <p className="mt-6 text-xs text-amber-600">
+                  Firm-only controls are hidden here and will display automatically when a firm owner is signed in.
+                </p>
+              )}
+            </article>
+          </div>
         </section>
       </div>
     </main>
