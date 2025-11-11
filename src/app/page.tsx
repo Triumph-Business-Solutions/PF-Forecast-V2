@@ -1,7 +1,9 @@
 "use client";
 
+import { HeroBackdrop } from "@/components/hero-backdrop";
+import { fetchClientWorkspaces } from "@/lib/clients/queries";
 import { ROLE_DEFINITIONS } from "@/lib/auth/roles";
-import { DEMO_CLIENTS } from "@/lib/clients/demo";
+import { supabase } from "@/lib/supabase";
 import type { ClientSummary } from "@/types/clients";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -178,29 +180,6 @@ const UPCOMING_MILESTONES = [
   }
 ];
 
-type PlatformFoundationSection = {
-  title: string;
-  description: string;
-};
-
-const PLATFORM_FOUNDATION_SECTIONS: PlatformFoundationSection[] = [
-  {
-    title: "Role-aware authentication",
-    description:
-      "Supabase Auth sessions will encode firm and company roles so UI access mirrors the stakeholder model."
-  },
-  {
-    title: "Relational data model",
-    description:
-      "Schema captures firms, companies, and memberships to persist collaboration boundaries alongside forecasts."
-  },
-  {
-    title: "Policy-driven security",
-    description:
-      "Row Level Security policies ensure members only interact with data their assigned role grants visibility into."
-  }
-];
-
 function TrendChart({ series }: { series: TrendSeries[] }) {
   const width = 720;
   const height = 260;
@@ -332,39 +311,6 @@ function DataTable({
   );
 }
 
-function HeroBackdrop() {
-  return (
-    <svg
-      viewBox="0 0 1440 400"
-      preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-0 h-full w-full"
-    >
-      <defs>
-        <linearGradient id="hero-sky" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#1e293b" />
-          <stop offset="100%" stopColor="#0f172a" />
-        </linearGradient>
-        <linearGradient id="hero-road" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#0f172a" stopOpacity="0.85" />
-          <stop offset="100%" stopColor="#020617" stopOpacity="0.95" />
-        </linearGradient>
-        <linearGradient id="hero-divider" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#f8fafc" stopOpacity="0.85" />
-          <stop offset="100%" stopColor="#e2e8f0" stopOpacity="0.3" />
-        </linearGradient>
-      </defs>
-      <rect width="1440" height="400" fill="url(#hero-sky)" />
-      <g opacity="0.6">
-        <path d="M-120 340 L340 180 L720 320 L1100 170 L1600 340 L1600 420 L-120 420 Z" fill="#0b1526" />
-        <path d="M-60 360 L360 200 L720 320 L1080 210 L1500 360 L1500 420 L-60 420 Z" fill="#12213a" opacity="0.8" />
-      </g>
-      <path d="M600 0 L840 0 L960 420 L480 420 Z" fill="url(#hero-road)" opacity="0.85" />
-      <path d="M718 0 L722 0 L842 420 L838 420 Z" fill="url(#hero-divider)" opacity="0.8" />
-      <path d="M682 0 L686 0 L806 420 L802 420 Z" fill="url(#hero-divider)" opacity="0.45" />
-    </svg>
-  );
-}
-
 export default function HomePage() {
   const [selectedView, setSelectedView] = useState<ViewOption>("6 months");
   const [startMonth, setStartMonth] = useState(() => {
@@ -377,6 +323,85 @@ export default function HomePage() {
   });
   const [cadence, setCadence] = useState<Cadence>("Monthly");
   const [trendView, setTrendView] = useState<TrendView>("Total");
+  const roleTitleMap = useMemo(() => new Map(ROLE_DEFINITIONS.map((role) => [role.id, role.title])), []);
+  const [assignedClients, setAssignedClients] = useState<ClientSummary[]>([]);
+  const [demoClients, setDemoClients] = useState<ClientSummary[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [clientFetchError, setClientFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadClients = async () => {
+      setIsLoadingClients(true);
+      setClientFetchError(null);
+
+      try {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+
+        if (userError) {
+          throw userError;
+        }
+
+        const userId = userData.user?.id ?? null;
+        const result = await fetchClientWorkspaces(userId);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setAssignedClients(result.assigned);
+        setDemoClients(result.demos);
+
+        if (result.errors.length > 0) {
+          const hasAssigned = result.assigned.length > 0;
+          setClientFetchError(
+            hasAssigned
+              ? "Some client records could not be loaded. Demo workspaces remain available."
+              : "We couldn't load your assigned clients. Demo workspaces are still available.",
+          );
+        } else if (!userId) {
+          setClientFetchError("Sign in to view your assigned clients. Demo workspaces are available to explore.");
+        } else {
+          setClientFetchError(null);
+        }
+      } catch (error) {
+        console.error("Failed to resolve client workspaces for the current user.", error);
+
+        if (!isMounted) {
+          return;
+        }
+
+        try {
+          const demosOnly = await fetchClientWorkspaces(null);
+
+          if (isMounted) {
+            setAssignedClients([]);
+            setDemoClients(demosOnly.demos);
+          }
+        } catch (fallbackError) {
+          console.error("Failed to load demo workspaces.", fallbackError);
+
+          if (isMounted) {
+            setAssignedClients([]);
+            setDemoClients([]);
+          }
+        }
+
+        setClientFetchError("We couldn't verify your account. Demo workspaces are available while we investigate.");
+      } finally {
+        if (isMounted) {
+          setIsLoadingClients(false);
+        }
+      }
+    };
+
+    void loadClients();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const trendSeries = useMemo(() => {
     const sourceSeries = cadence === "Monthly" ? (trendView === "Total" ? [{
@@ -438,41 +463,21 @@ export default function HomePage() {
     [cadence, monthlyHeaders.length]
   );
 
-  const assignedClientRoster = useMemo<ClientSummary[]>(
-    () => [
-      {
-        id: "client-aurora-agency",
-        name: "Aurora Agency",
-        activeSince: "September 2022",
-        type: "client",
-        description: "Marketing collective focused on retainer-based profit planning.",
-      },
-      {
-        id: "client-horizon-analytics",
-        name: "Horizon Analytics",
-        activeSince: "May 2023",
-        type: "client",
-        description: "Data consultancy experimenting with scenario planning modules.",
-      },
-    ],
-    [],
-  );
-
   const availableClients = useMemo<ClientSummary[]>(() => {
     const roster = new Map<string, ClientSummary>();
 
-    assignedClientRoster.forEach((client) => {
+    assignedClients.forEach((client) => {
       roster.set(client.id, client);
     });
 
-    DEMO_CLIENTS.forEach((client) => {
+    demoClients.forEach((client) => {
       roster.set(client.id, client);
     });
 
     return Array.from(roster.values());
-  }, [assignedClientRoster]);
+  }, [assignedClients, demoClients]);
 
-  const [activeClientId, setActiveClientId] = useState<string>(() => availableClients[0]?.id ?? "");
+  const [activeClientId, setActiveClientId] = useState<string>("");
   const [isClientMenuOpen, setIsClientMenuOpen] = useState(false);
   const clientMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const clientMenuPanelRef = useRef<HTMLDivElement | null>(null);
@@ -520,14 +525,12 @@ export default function HomePage() {
   }, [isClientMenuOpen]);
 
   const activeClient = availableClients.find((client) => client.id === activeClientId) ?? null;
-  const assignedClients = availableClients.filter((client) => client.type === "client");
-  const demoClients = availableClients.filter((client) => client.type === "demo");
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 pb-16">
       <header className="relative overflow-hidden bg-slate-900 text-white shadow-2xl shadow-slate-900/30">
         <HeroBackdrop />
-        <div className="relative mx-auto flex max-w-6xl flex-col gap-10 px-6 py-12">
+        <div className="relative mx-auto flex w-full flex-col gap-10 px-4 py-12 sm:px-[5vw]">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-xl space-y-4">
               <p className="text-sm font-semibold uppercase tracking-[0.35em] text-sky-200/80">Client dashboard</p>
@@ -571,79 +574,117 @@ export default function HomePage() {
                     aria-label="Select active client"
                     className="absolute right-0 z-20 mt-3 w-72 rounded-2xl border border-white/10 bg-white/95 p-2 text-left text-slate-800 shadow-xl shadow-slate-900/40 backdrop-blur"
                   >
-                    {assignedClients.length > 0 ? (
-                      <div>
-                        <p className="px-2 pb-1 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-500">Your clients</p>
-                        <ul className="space-y-1">
-                          {assignedClients.map((client) => {
-                            const isSelected = client.id === activeClient?.id;
-                            return (
-                              <li key={client.id}>
-                                <button
-                                  type="button"
-                                  role="option"
-                                  aria-selected={isSelected}
-                                  onClick={() => {
-                                    setActiveClientId(client.id);
-                                    setIsClientMenuOpen(false);
-                                  }}
-                                  className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
-                                    isSelected
-                                      ? "bg-slate-900/5 text-slate-900"
-                                      : "text-slate-700 hover:bg-slate-900/5 hover:text-slate-900"
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-sm font-semibold">{client.name}</span>
-                                  </div>
-                                  <p className="text-xs text-slate-500">Active since {client.activeSince}</p>
-                                  {client.description ? (
-                                    <p className="mt-1 text-[0.65rem] text-slate-500">{client.description}</p>
-                                  ) : null}
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
+                    {isLoadingClients ? (
+                      <div className="px-3 py-4 text-sm text-slate-500">Loading clients…</div>
+                    ) : (
+                      <>
+                        {assignedClients.length > 0 ? (
+                          <div>
+                            <p className="px-2 pb-1 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-500">Your clients</p>
+                            <ul className="space-y-1">
+                              {assignedClients.map((client) => {
+                                const isSelected = client.id === activeClient?.id;
+                                const roleLabel = client.accessLevel
+                                  ? roleTitleMap.get(client.accessLevel) ?? client.accessLevel
+                                  : null;
+
+                                return (
+                                  <li key={client.id}>
+                                    <button
+                                      type="button"
+                                      role="option"
+                                      aria-selected={isSelected}
+                                      onClick={() => {
+                                        setActiveClientId(client.id);
+                                        setIsClientMenuOpen(false);
+                                      }}
+                                      className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
+                                        isSelected
+                                          ? "bg-slate-900/5 text-slate-900"
+                                          : "text-slate-700 hover:bg-slate-900/5 hover:text-slate-900"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-semibold">{client.name}</span>
+                                        {roleLabel ? (
+                                          <span className="rounded-full bg-slate-900/10 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-600">
+                                            {roleLabel}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                      <p className="text-xs text-slate-500">Active since {client.activeSince}</p>
+                                      {client.description ? (
+                                        <p className="mt-1 text-[0.65rem] text-slate-500">{client.description}</p>
+                                      ) : null}
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {demoClients.length > 0 ? (
+                          <div
+                            className={`${
+                              assignedClients.length > 0 ? "mt-2 border-t border-slate-200/60 pt-2" : ""
+                            }`}
+                          >
+                            <p className="px-2 pb-1 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-500">Demo workspaces</p>
+                            <ul className="space-y-1">
+                              {demoClients.map((client) => {
+                                const isSelected = client.id === activeClient?.id;
+                                const roleLabel = client.accessLevel
+                                  ? roleTitleMap.get(client.accessLevel) ?? client.accessLevel
+                                  : null;
+
+                                return (
+                                  <li key={client.id}>
+                                    <button
+                                      type="button"
+                                      role="option"
+                                      aria-selected={isSelected}
+                                      onClick={() => {
+                                        setActiveClientId(client.id);
+                                        setIsClientMenuOpen(false);
+                                      }}
+                                      className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
+                                        isSelected
+                                          ? "bg-sky-100 text-slate-900"
+                                          : "text-slate-700 hover:bg-sky-100/70 hover:text-slate-900"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-semibold">{client.name}</span>
+                                        <div className="flex items-center gap-1">
+                                          <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-sky-600">
+                                            Demo
+                                          </span>
+                                          {roleLabel ? (
+                                            <span className="rounded-full bg-slate-900/10 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-600">
+                                              {roleLabel}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                      <p className="text-xs text-slate-500">Active since {client.activeSince}</p>
+                                      {client.description ? (
+                                        <p className="mt-1 text-[0.65rem] text-slate-500">{client.description}</p>
+                                      ) : null}
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {assignedClients.length === 0 && demoClients.length === 0 ? (
+                          <div className="px-3 py-4 text-sm text-slate-500">No clients available yet.</div>
+                        ) : null}
+                      </>
+                    )}
+                    {clientFetchError ? (
+                      <p className="px-3 pt-3 text-[0.65rem] font-medium text-amber-600">{clientFetchError}</p>
                     ) : null}
-                    <div className="mt-2 border-t border-slate-200/60 pt-2">
-                      <p className="px-2 pb-1 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-500">Demo workspaces</p>
-                      <ul className="space-y-1">
-                        {demoClients.map((client) => {
-                          const isSelected = client.id === activeClient?.id;
-                          return (
-                            <li key={client.id}>
-                              <button
-                                type="button"
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => {
-                                  setActiveClientId(client.id);
-                                  setIsClientMenuOpen(false);
-                                }}
-                                className={`w-full rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
-                                  isSelected
-                                    ? "bg-sky-100 text-slate-900"
-                                    : "text-slate-700 hover:bg-sky-100/70 hover:text-slate-900"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-sm font-semibold">{client.name}</span>
-                                  <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-sky-600">
-                                    Demo
-                                  </span>
-                                </div>
-                                <p className="text-xs text-slate-500">Active since {client.activeSince}</p>
-                                {client.description ? (
-                                  <p className="mt-1 text-[0.65rem] text-slate-500">{client.description}</p>
-                                ) : null}
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
                   </div>
                 ) : null}
               </div>
@@ -662,6 +703,9 @@ export default function HomePage() {
               >
                 Manage client access
               </button>
+              {clientFetchError ? (
+                <p className="text-xs font-medium text-amber-200/90">{clientFetchError}</p>
+              ) : null}
             </div>
           </div>
 
@@ -756,7 +800,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-6xl flex-col gap-12 px-6 py-12">
+      <div className="mx-auto flex w-full flex-col gap-12 px-4 py-12 sm:px-[5vw]">
         <section className="grid gap-8 lg:grid-cols-12 lg:items-stretch">
           <aside className="lg:col-span-4 xl:col-span-3">
             <article className="flex h-full flex-col justify-between gap-8 rounded-3xl border border-white/70 bg-white/95 p-6 shadow-2xl shadow-slate-900/15 backdrop-blur">
@@ -868,59 +912,6 @@ export default function HomePage() {
           </div>
         </section>
       </div>
-      <section className="mt-16 w-full max-w-5xl space-y-12">
-        <div className="space-y-4 text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-            Purpose-built access for every stakeholder
-          </h2>
-          <p className="text-lg text-slate-600">
-            Define who can see and manage your Profit First forecasts. During development we’ll introduce authentication, but
-            the role model is ready so you can plan collaboration today.
-          </p>
-        </div>
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {ROLE_DEFINITIONS.map((role) => (
-            <article
-              key={role.title}
-              className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition hover:shadow-lg"
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-slate-900">{role.title}</h3>
-                <span className="rounded-full bg-brand-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-brand-700">
-                  {role.badge}
-                </span>
-              </div>
-              <p className="mt-3 text-sm text-slate-600">{role.summary}</p>
-              <ul className="mt-6 space-y-3 text-sm text-slate-600">
-                {role.permissions.map((permission) => (
-                  <li key={permission} className="flex items-start gap-2">
-                    <span className="mt-1 inline-flex h-2.5 w-2.5 flex-none rounded-full bg-brand-500" aria-hidden />
-                    <span>{permission}</span>
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ))}
-        </div>
-        <div className="rounded-2xl border border-dashed border-brand-200 bg-brand-50 p-6 text-sm text-brand-800">
-          <div className="space-y-4 text-left md:text-center">
-            <h3 className="text-base font-semibold uppercase tracking-wider text-brand-700">Platform Foundations</h3>
-            <p>
-              These stakeholder roles now drive both the database schema and the upcoming authentication flow. Supabase Auth
-              will issue role-aware sessions, and relational tables persist firm, company, and membership data for future
-              iterations of the product.
-            </p>
-            <div className="grid gap-4 md:grid-cols-3">
-              {PLATFORM_FOUNDATION_SECTIONS.map((section) => (
-                <div key={section.title} className="rounded-xl border border-brand-200 bg-white p-4 text-left shadow-sm">
-                  <h4 className="text-sm font-semibold text-brand-800">{section.title}</h4>
-                  <p className="mt-2 text-xs text-brand-700">{section.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
     </main>
   );
 }
