@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HeroBackdrop } from "@/components/hero-backdrop";
 import { AllocationCadenceForm } from "@/components/settings/allocation-cadence-form";
+import { DirectCostAllocationForm } from "@/components/settings/direct-cost-allocation-form";
+import { MainAllocationForm } from "@/components/settings/main-allocation-form";
 import { supabase } from "@/lib/supabase";
 import { useDemoAuth } from "@/components/demo-auth-provider";
 import { fetchClientWorkspaces } from "@/lib/clients/queries";
@@ -54,6 +56,16 @@ const sections: SectionDefinition[] = [
       {
         title: "Allocation cadence",
         description: "Schedule how frequently the system should run profit allocations for this company.",
+        status: "available",
+      },
+      {
+        title: "Direct cost allocations",
+        description: "Prioritize materials, payroll, and custom direct cost buckets before main allocations.",
+        status: "available",
+      },
+      {
+        title: "Remainder allocation targets",
+        description: "Split real revenue among Profit First accounts and custom buckets for every allocation run.",
         status: "available",
       },
       {
@@ -359,12 +371,18 @@ export default function SettingsPage() {
 
   const shouldRenderAllocationCadence =
     selectedSection.key === "profit-first-setup" && selectedItem?.title === "Allocation cadence";
+  const shouldRenderDirectCostAllocations =
+    selectedSection.key === "profit-first-setup" && selectedItem?.title === "Direct cost allocations";
+  const shouldRenderRemainderAllocations =
+    selectedSection.key === "profit-first-setup" && selectedItem?.title === "Remainder allocation targets";
   const resolvedCompanyName = activeCompany?.name ?? displayCompanyName;
-  const canRenderCadenceForm =
-    shouldRenderAllocationCadence && Boolean(activeCompanyId) && (!hasResolvedCompanies || Boolean(activeCompany));
-  const shouldShowCadenceSkeleton = shouldRenderAllocationCadence && isLoadingCompany && !activeCompanyId;
-  const shouldShowCadenceUnavailable =
-    shouldRenderAllocationCadence && hasResolvedCompanies && !isLoadingCompany && !activeCompanyId;
+  const shouldRenderCompanyScopedItem =
+    shouldRenderAllocationCadence || shouldRenderDirectCostAllocations || shouldRenderRemainderAllocations;
+  const canRenderSelectedForm =
+    shouldRenderCompanyScopedItem && Boolean(activeCompanyId) && (!hasResolvedCompanies || Boolean(activeCompany));
+  const shouldShowSelectedSkeleton = shouldRenderCompanyScopedItem && isLoadingCompany && !activeCompanyId;
+  const shouldShowSelectedUnavailable =
+    shouldRenderCompanyScopedItem && hasResolvedCompanies && !isLoadingCompany && !activeCompanyId;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 pb-16">
@@ -517,22 +535,40 @@ export default function SettingsPage() {
                       )}
                     </div>
                     <p className="mt-3 text-sm text-slate-700">{selectedItem.description}</p>
-                    {canRenderCadenceForm ? (
-                      <AllocationCadenceForm
-                        companyId={activeCompanyId}
-                        companyName={resolvedCompanyName}
-                        key={activeCompanyId}
-                      />
+                    {canRenderSelectedForm ? (
+                      <>
+                        {shouldRenderAllocationCadence ? (
+                          <AllocationCadenceForm
+                            companyId={activeCompanyId}
+                            companyName={resolvedCompanyName}
+                            key={`cadence-${activeCompanyId}`}
+                          />
+                        ) : null}
+                        {shouldRenderDirectCostAllocations ? (
+                          <DirectCostAllocationForm
+                            companyId={activeCompanyId}
+                            companyName={resolvedCompanyName}
+                            key={`direct-${activeCompanyId}`}
+                          />
+                        ) : null}
+                        {shouldRenderRemainderAllocations ? (
+                          <MainAllocationForm
+                            companyId={activeCompanyId}
+                            companyName={resolvedCompanyName}
+                            key={`remainder-${activeCompanyId}`}
+                          />
+                        ) : null}
+                      </>
                     ) : null}
-                    {shouldShowCadenceSkeleton ? (
+                    {shouldShowSelectedSkeleton ? (
                       <div className="mt-6 space-y-2 text-sm text-slate-500">
                         <div className="h-4 w-40 animate-pulse rounded bg-slate-200" />
                         <div className="h-4 w-64 animate-pulse rounded bg-slate-200" />
                       </div>
                     ) : null}
-                    {shouldShowCadenceUnavailable ? (
+                    {shouldShowSelectedUnavailable ? (
                       <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                        Select an active company from the dashboard to configure allocation cadence for its forecast.
+                        Select an active company from the dashboard to configure these Profit First settings.
                       </div>
                     ) : null}
                     {companyError ? (

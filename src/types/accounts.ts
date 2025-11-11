@@ -27,3 +27,14 @@ export interface CustomAccountDefinition extends ProfitFirstAccount {
   readonly type: 'custom';
   customPosition: number;
 }
+
+export interface ProfitFirstAccountRecord {
+  id: string;
+  companyId: string;
+  type: AccountType;
+  group: AccountGroup;
+  name: string;
+  allocationPercent: number;
+  isActive: boolean;
+  customPosition: number | null;
+}
