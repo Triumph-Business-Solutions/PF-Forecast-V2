@@ -2,15 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { DEMO_USERS, demoUserMap } from "@/lib/demo-users";
+import { DEMO_USERS, demoUserMap, type DemoUserDefinition } from "@/lib/demo-users";
 
-export interface DemoUserSelection {
-  id: string;
-  email: string;
-  displayName: string;
-  role: string;
-  description: string;
-}
+export type DemoUserSelection = DemoUserDefinition;
 
 type DemoAuthContextValue = {
   user: DemoUserSelection | null;
