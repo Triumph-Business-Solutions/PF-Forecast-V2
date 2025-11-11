@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type SectionItem = {
   title: string;
@@ -22,8 +22,8 @@ const statusCopy: Record<NonNullable<SectionItem["status"]>, string> = {
 };
 
 export default function SettingsPage() {
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [selectedSectionKey, setSelectedSectionKey] = useState<string>("onboarding");
+  const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
   const isFirmOwner = false;
 
   const sections = useMemo<SectionDefinition[]>(
@@ -103,20 +103,35 @@ export default function SettingsPage() {
     [],
   );
 
-  const toggleSection = (key: string) => {
-    setExpandedSections((previous) => ({
-      ...previous,
-      [key]: !previous[key],
-    }));
-  };
-
   const selectedSection = sections.find((section) => section.key === selectedSectionKey) ?? sections[0];
   const hasSelectedItems = Boolean(selectedSection?.items?.length);
   const visibleSelectedItems = selectedSection?.items?.filter((item) =>
     item.requiresFirmOwner ? isFirmOwner : true,
   );
-  const shouldShowSelectedItems = hasSelectedItems && (expandedSections[selectedSection.key] ?? false);
   const hiddenFirmOwnerItems = selectedSection?.items?.some((item) => item.requiresFirmOwner) && !isFirmOwner;
+
+  const getItemIdentifier = (sectionKey: string, item: SectionItem) => `${sectionKey}:${item.title}`;
+
+  useEffect(() => {
+    if (visibleSelectedItems?.length) {
+      setSelectedItemKey((previous) => {
+        const hasExistingSelection = visibleSelectedItems.some(
+          (item) => getItemIdentifier(selectedSection.key, item) === previous,
+        );
+
+        return hasExistingSelection
+          ? previous
+          : getItemIdentifier(selectedSection.key, visibleSelectedItems[0]);
+      });
+    } else {
+      setSelectedItemKey(null);
+    }
+  }, [selectedSection.key, visibleSelectedItems]);
+
+  const selectedItem = visibleSelectedItems?.find(
+    (item) => getItemIdentifier(selectedSection.key, item) === selectedItemKey,
+  );
+  const hasVisibleItems = Boolean(visibleSelectedItems?.length);
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16">
@@ -144,10 +159,16 @@ export default function SettingsPage() {
                     onClick={() => {
                       setSelectedSectionKey(section.key);
                       if (section.items?.length) {
-                        setExpandedSections((previous) => ({
-                          ...previous,
-                          [section.key]: previous[section.key] ?? false,
-                        }));
+                        const firstAccessibleItem = section.items.find((item) =>
+                          item.requiresFirmOwner ? isFirmOwner : true,
+                        );
+                        setSelectedItemKey(
+                          firstAccessibleItem
+                            ? getItemIdentifier(section.key, firstAccessibleItem)
+                            : null,
+                        );
+                      } else {
+                        setSelectedItemKey(null);
                       }
                     }}
                     className={`w-full rounded-xl border px-5 py-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 lg:px-4 lg:py-3 ${
@@ -165,75 +186,94 @@ export default function SettingsPage() {
             </ul>
           </nav>
 
-          <article className="flex-1 rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
-            <header className="flex flex-col gap-2">
-              <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-1 flex-col gap-6 lg:flex-row">
+            {hasVisibleItems && visibleSelectedItems && (
+              <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card lg:w-72 lg:shrink-0">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">Selected module</p>
-                  <h2 className="text-2xl font-semibold text-slate-900">{selectedSection.title}</h2>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Available modules</p>
+                  <h3 className="text-lg font-semibold text-slate-900">{selectedSection.title}</h3>
+                  <p className="text-sm text-slate-600">Choose a workflow to view details.</p>
                 </div>
-                {hasSelectedItems ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(selectedSection.key)}
-                    className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
-                    aria-expanded={expandedSections[selectedSection.key] ?? false}
-                  >
-                    {expandedSections[selectedSection.key] ? "Collapse" : "Expand"}
-                    <span
-                      className={`inline-block h-4 w-4 transition-transform ${
-                        expandedSections[selectedSection.key] ? "rotate-180" : ""
-                      }`}
-                      aria-hidden
-                    >
-                      <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path
-                          d="M4 6l4 4 4-4"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </span>
-                  </button>
-                ) : (
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Placeholder
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-slate-600">{selectedSection.description}</p>
-            </header>
 
-            {hasSelectedItems && shouldShowSelectedItems && visibleSelectedItems && (
-              <div className="mt-6 space-y-4">
-                {visibleSelectedItems.map((item) => (
-                  <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <ul className="mt-4 space-y-2">
+                  {visibleSelectedItems.map((item) => {
+                    const itemIdentifier = getItemIdentifier(selectedSection.key, item);
+                    const isActive = selectedItemKey === itemIdentifier;
+
+                    return (
+                      <li key={itemIdentifier}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedItemKey(itemIdentifier)}
+                          className={`w-full rounded-xl border px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${
+                            isActive
+                              ? "border-brand-300 bg-brand-50 text-brand-900 shadow-sm"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-900"
+                          }`}
+                          aria-current={isActive ? "page" : undefined}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold">{item.title}</span>
+                            {item.status && (
+                              <span className="inline-flex items-center rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-700">
+                                {statusCopy[item.status]}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-xs text-slate-500">{item.description}</p>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </aside>
+            )}
+
+            <article className="flex-1 rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+              <header className="space-y-2">
+                <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">Selected module</p>
+                <h2 className="text-2xl font-semibold text-slate-900">{selectedSection.title}</h2>
+                <p className="text-sm text-slate-600">{selectedSection.description}</p>
+              </header>
+
+              {selectedItem && (
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="text-base font-semibold text-slate-900">{item.title}</h3>
-                      {item.status && (
-                        <span className="inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-brand-700">
-                          {statusCopy[item.status]}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Workflow focus</p>
+                        <h3 className="text-xl font-semibold text-slate-900">{selectedItem.title}</h3>
+                      </div>
+                      {selectedItem.status && (
+                        <span className="inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-700">
+                          {statusCopy[selectedItem.status]}
                         </span>
                       )}
                     </div>
-                    <p className="mt-2 text-sm text-slate-600">{item.description}</p>
+                    <p className="mt-3 text-sm text-slate-700">{selectedItem.description}</p>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              )}
 
-            {hasSelectedItems && !shouldShowSelectedItems && (
-              <p className="mt-6 text-xs text-slate-500">Expand to preview the focused modules that will live inside this area.</p>
-            )}
+              {hasSelectedItems && !hasVisibleItems && (
+                <p className="mt-6 text-xs text-slate-500">
+                  Modules that require firm owner access will appear here automatically when available.
+                </p>
+              )}
 
-            {hasSelectedItems && hiddenFirmOwnerItems && !isFirmOwner && (
-              <p className="mt-6 text-xs text-amber-600">
-                Firm-only controls are hidden here and will display automatically when a firm owner is signed in.
-              </p>
-            )}
-          </article>
+              {!hasSelectedItems && (
+                <span className="mt-6 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Placeholder
+                </span>
+              )}
+
+              {hasSelectedItems && hiddenFirmOwnerItems && !isFirmOwner && (
+                <p className="mt-6 text-xs text-amber-600">
+                  Firm-only controls are hidden here and will display automatically when a firm owner is signed in.
+                </p>
+              )}
+            </article>
+          </div>
         </section>
       </div>
     </main>
