@@ -104,17 +104,6 @@ export default function SettingsPage() {
     [],
   );
 
-  const moduleStats = useMemo(() => {
-    const items = sections.flatMap((section) => section.items ?? []);
-    return {
-      availableTools: items.filter((item) => item.status === "available").length,
-      upcomingTools: items.filter((item) => item.status === "upcoming").length,
-      firmRestrictedTools: items.filter((item) => item.requiresFirmOwner).length,
-    };
-  }, [sections]);
-
-  const { availableTools, upcomingTools, firmRestrictedTools } = moduleStats;
-
   const toggleSection = (key: string) => {
     setExpandedSections((previous) => ({
       ...previous,
@@ -149,22 +138,6 @@ export default function SettingsPage() {
                   teams through focused configuration flows as functionality rolls out.
                 </p>
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-wide text-slate-200/80">
-              <span className="rounded-full border border-white/20 bg-white/5 px-4 py-2">
-                {sections.length} primary modules
-              </span>
-              <span className="rounded-full border border-white/20 bg-white/5 px-4 py-2">
-                {availableTools} tools available
-              </span>
-              <span className="rounded-full border border-white/20 bg-white/5 px-4 py-2">
-                {upcomingTools} coming soon
-              </span>
-              {firmRestrictedTools ? (
-                <span className="rounded-full border border-white/20 bg-white/5 px-4 py-2">
-                  {firmRestrictedTools} firm-owner only
-                </span>
-              ) : null}
             </div>
           </div>
         </div>

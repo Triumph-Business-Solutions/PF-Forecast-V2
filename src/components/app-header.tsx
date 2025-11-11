@@ -13,8 +13,8 @@ export function AppHeader() {
     : "border-slate-200/70 bg-white/90 text-slate-900";
 
   const buttonClassName = isHomePage
-    ? "border-white/30 bg-white/10 text-white hover:bg-white/20"
-    : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50";
+    ? "bg-white/10 text-white hover:bg-white/20"
+    : "bg-slate-900/5 text-slate-700 hover:bg-slate-900/10";
 
   return (
     <header
@@ -32,7 +32,7 @@ export function AppHeader() {
         </Link>
         <Link
           href={isSettingsPage ? "/" : "/settings"}
-          className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+          className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
             buttonClassName
           } ${isSettingsPage ? "" : "shadow-sm"}`}
           prefetch
