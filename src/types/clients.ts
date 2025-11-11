@@ -9,4 +9,5 @@ export interface ClientSummary {
   type: ClientWorkspaceType;
   description?: string;
   accessLevel?: PlatformRole;
+  firmId?: string;
 }

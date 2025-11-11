@@ -4,11 +4,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useDemoAuth } from "@/components/demo-auth-provider";
+import { useDashboard } from "@/components/dashboard/dashboard-context";
 
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, clearUser } = useDemoAuth();
+  const { openDashboard, resetDashboardSession } = useDashboard();
   const isSettingsPage = pathname?.startsWith("/settings");
   const isHomePage = pathname === "/";
 
@@ -25,9 +27,12 @@ export function AppHeader() {
     : "bg-slate-900/5 text-slate-700 hover:bg-slate-900/10";
 
   const handleSwitchUser = () => {
+    resetDashboardSession();
     clearUser();
     router.push("/login");
   };
+
+  const showDashboardButton = Boolean(user && (user.role === "firm_owner" || user.role === "firm_employee"));
 
   return (
     <header
@@ -70,6 +75,15 @@ export function AppHeader() {
               Demo login
             </Link>
           )}
+          {showDashboardButton ? (
+            <button
+              type="button"
+              onClick={openDashboard}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${buttonClassName}`}
+            >
+              Firm dashboard
+            </button>
+          ) : null}
           <Link
             href={isSettingsPage ? "/" : "/settings"}
             className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
