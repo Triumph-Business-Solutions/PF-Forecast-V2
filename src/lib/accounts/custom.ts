@@ -1,6 +1,6 @@
 import { type CustomAccountDefinition } from '@/types/accounts';
 
-export const MAX_CUSTOM_MAIN_ACCOUNTS = 10;
+export const MAX_CUSTOM_MAIN_ACCOUNTS = 15;
 
 export const buildCustomAccountDefinition = (
   position: number,
