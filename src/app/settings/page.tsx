@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HeroBackdrop } from "@/components/hero-backdrop";
+import { AllocationCadenceForm } from "@/components/settings/allocation-cadence-form";
+import { supabase } from "@/lib/supabase";
 
 type SectionItem = {
   title: string;
@@ -44,7 +46,7 @@ const sections: SectionDefinition[] = [
       {
         title: "Allocation cadence",
         description: "Schedule how frequently the system should run profit allocations for this company.",
-        status: "upcoming",
+        status: "available",
       },
       {
         title: "Profit distribution",
@@ -95,6 +97,8 @@ const statusCopy: Record<NonNullable<SectionItem["status"]>, string> = {
 };
 
 const initialSectionKey = sections[0]?.key ?? "";
+const DEFAULT_COMPANY_ID = "00000000-0000-0000-0000-00000000d101";
+const DEFAULT_COMPANY_NAME = "Triumph Demo";
 
 export default function SettingsPage() {
   const [selectedSectionKey, setSelectedSectionKey] = useState<string>(initialSectionKey);
@@ -102,6 +106,9 @@ export default function SettingsPage() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const selectionMemory = useRef<Record<string, string | null>>({});
   const isFirmOwner = false;
+  const [activeCompanyId, setActiveCompanyId] = useState<string>(DEFAULT_COMPANY_ID);
+  const [activeCompanyName, setActiveCompanyName] = useState<string>(DEFAULT_COMPANY_NAME);
+  const [isLoadingCompany, setIsLoadingCompany] = useState<boolean>(false);
 
   const selectedSection = useMemo(
     () => sections.find((section) => section.key === selectedSectionKey) ?? sections[0],
@@ -203,6 +210,48 @@ export default function SettingsPage() {
       [sectionKey]: !previous[sectionKey],
     }));
   };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCompany = async () => {
+      setIsLoadingCompany(true);
+
+      const { data, error } = await supabase
+        .from("companies")
+        .select("id, name")
+        .order("is_demo", { ascending: false })
+        .order("name", { ascending: true })
+        .limit(1);
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (error) {
+        console.error("Unable to load default company for settings", error);
+        setIsLoadingCompany(false);
+        return;
+      }
+
+      const company = (data ?? [])[0];
+      if (company?.id) {
+        setActiveCompanyId(company.id as string);
+        setActiveCompanyName((company.name as string) ?? DEFAULT_COMPANY_NAME);
+      }
+
+      setIsLoadingCompany(false);
+    };
+
+    void loadCompany();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const shouldRenderAllocationCadence =
+    selectedSection.key === "profit_first_setup" && selectedItem?.title === "Allocation cadence";
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-100 to-slate-200 pb-16">
@@ -347,6 +396,19 @@ export default function SettingsPage() {
                       )}
                     </div>
                     <p className="mt-3 text-sm text-slate-700">{selectedItem.description}</p>
+                    {shouldRenderAllocationCadence && activeCompanyId ? (
+                      <AllocationCadenceForm
+                        companyId={activeCompanyId}
+                        companyName={activeCompanyName}
+                        key={activeCompanyId}
+                      />
+                    ) : null}
+                    {shouldRenderAllocationCadence && !activeCompanyId && isLoadingCompany && (
+                      <div className="mt-6 space-y-2 text-sm text-slate-500">
+                        <div className="h-4 w-40 animate-pulse rounded bg-slate-200" />
+                        <div className="h-4 w-64 animate-pulse rounded bg-slate-200" />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
