@@ -528,6 +528,14 @@ export default function HomePage() {
     }
   }, [activeClientId, availableClients]);
 
+  const canSwitchClients = availableClients.length > 1;
+
+  useEffect(() => {
+    if (!canSwitchClients && isClientMenuOpen) {
+      setIsClientMenuOpen(false);
+    }
+  }, [canSwitchClients, isClientMenuOpen]);
+
   useEffect(() => {
     if (!isClientMenuOpen) {
       return;
@@ -578,29 +586,35 @@ export default function HomePage() {
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200/80">
               <div className="relative">
-                <button
-                  ref={clientMenuButtonRef}
-                  type="button"
-                  onClick={() => setIsClientMenuOpen((previous) => !previous)}
-                  className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-100 transition hover:border-white/40 hover:text-white"
-                  aria-haspopup="listbox"
-                  aria-expanded={isClientMenuOpen}
-                  aria-controls="client-selector-menu"
-                >
-                  <span>Active client · {activeClient ? activeClient.name : "None available"}</span>
-                  <span aria-hidden className={`transition ${isClientMenuOpen ? "rotate-180" : ""}`}>
-                    <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        d="M4 6l4 4 4-4"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                </button>
-                {isClientMenuOpen ? (
+                {canSwitchClients ? (
+                  <button
+                    ref={clientMenuButtonRef}
+                    type="button"
+                    onClick={() => setIsClientMenuOpen((previous) => !previous)}
+                    className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-100 transition hover:border-white/40 hover:text-white"
+                    aria-haspopup="listbox"
+                    aria-expanded={isClientMenuOpen}
+                    aria-controls="client-selector-menu"
+                  >
+                    <span>Active client · {activeClient ? activeClient.name : "None available"}</span>
+                    <span aria-hidden className={`transition ${isClientMenuOpen ? "rotate-180" : ""}`}>
+                      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                          d="M4 6l4 4 4-4"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-200">
+                    <span>Active client · {activeClient ? activeClient.name : "None available"}</span>
+                  </div>
+                )}
+                {canSwitchClients && isClientMenuOpen ? (
                   <div
                     ref={clientMenuPanelRef}
                     id="client-selector-menu"
