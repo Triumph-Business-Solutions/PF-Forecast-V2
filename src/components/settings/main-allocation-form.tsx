@@ -259,9 +259,13 @@ export function MainAllocationForm({ companyId, companyName }: MainAllocationFor
       return next;
     });
 
-    if (account.id) {
-      setRemovedIds((previous) => [...previous, account.id]);
-    }
+    setRemovedIds((previous) => {
+      if (!account.id) {
+        return previous;
+      }
+
+      return [...previous, account.id];
+    });
   };
 
   const handleAddCustomAccount = () => {
