@@ -277,8 +277,10 @@ export function DirectCostAllocationForm({ companyId, companyName }: DirectCostA
       return next;
     });
 
-    if (account.id) {
-      setRemovedIds((previous) => [...previous, account.id]);
+    const id = account.id;
+
+    if (id) {
+      setRemovedIds((previous) => [...previous, id]);
     }
   };
 
